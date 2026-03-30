@@ -1,4 +1,4 @@
-# Practical Techniques for Improving LLM-as-Judge Accuracy: An Ablation Study on RewardBench 2
+# Practical Techniques for Improving LLM-as-Judge Accuracy on RewardBench 2
 
 ## Abstract
 

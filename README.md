@@ -1,4 +1,6 @@
-# RewardBench 2: LLM-as-Judge Ablation Study
+# Practical Techniques for Improving LLM-as-Judge Accuracy on RewardBench 2
+
+**Author:** Ryan Lail
 
 Ablation study testing practical techniques to improve LLM-as-judge accuracy on [RewardBench 2](https://huggingface.co/datasets/allenai/reward-bench-2) (ratings mode). See [WRITEUP.md](WRITEUP.md) for full methodology, mathematical derivations, and analysis.
 
@@ -78,3 +80,14 @@ experiments/llm-judge-ablations/
 - All experiment scripts write results **incrementally** and support **resume** — if interrupted, restart the same command and it skips completed examples.
 - Run experiments in `tmux` to survive SSH disconnections.
 - The escalation and combined experiments collect both mini and full scores for every example, enabling offline analysis of escalation strategies without re-running API calls.
+
+## Citation
+
+```bibtex
+@misc{lail2025llmjudge,
+  title={Practical Techniques for Improving LLM-as-Judge Accuracy on RewardBench 2},
+  author={Ryan Lail},
+  year={2025},
+  url={https://github.com/composo-ai/llm-judge-ablations}
+}
+```
