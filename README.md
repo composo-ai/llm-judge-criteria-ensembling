@@ -87,7 +87,7 @@ experiments/llm-judge-ablations/
 @misc{lail2025llmjudge,
   title={Practical Techniques for Improving LLM-as-Judge Accuracy on RewardBench 2},
   author={Ryan Lail},
-  year={2025},
+  year={2026},
   url={https://github.com/composo-ai/llm-judge-ablations}
 }
 ```
