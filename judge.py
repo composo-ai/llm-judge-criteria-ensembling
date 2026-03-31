@@ -206,7 +206,7 @@ async def score_response(
                 model=model,
                 max_completion_tokens=4096,
                 temperature=temperature,
-                reasoning_effort="none",
+                reasoning_effort="none",  # Held constant across all conditions to isolate prompt/aggregation effects
                 messages=[
                     {"role": "user", "content": user_message},
                 ],
