@@ -214,6 +214,20 @@ def plot_pareto_frontier(metrics: dict):
                 points.append(
                     (mini_cost, ref["always_mini"]["overall"], "Mini model k=8")
                 )
+            # Best cost-efficient hard routing point (from escalation only)
+            if m["type"] == "escalation" and esc.get("thresholds"):
+                # Find Pareto frontier, pick the point with best accuracy below 0.3 cost ratio
+                sorted_thresh = sorted(esc["thresholds"], key=lambda t: t["effective_cost_ratio"])
+                best_cheap = None
+                for t in sorted_thresh:
+                    if t["effective_cost_ratio"] < 0.3:
+                        if best_cheap is None or t["accuracy"] > best_cheap["accuracy"]:
+                            best_cheap = t
+                if best_cheap:
+                    hr_cost = cost * best_cheap["effective_cost_ratio"]
+                    points.append(
+                        (hr_cost, best_cheap["accuracy"], f"Hard routing (θ={best_cheap['threshold']:.2f})")
+                    )
             # Best soft blend — use combined if available, else escalation
             blended = m.get("escalation_blended", {})
             if blended.get("thresholds"):
@@ -288,7 +302,7 @@ def plot_pareto_frontier(metrics: dict):
     ax.set_ylabel("Accuracy")
     ax.set_title("Cost-Accuracy Pareto Frontier")
     ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f"{y:.0%}"))
-    ax.axhline(y=0.25, color="gray", linestyle=":", linewidth=0.5)
+    ax.set_ylim(0.68, 0.88)
     ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f"{x:.1f}×"))
 
     _save(fig, "pareto_frontier")
@@ -316,71 +330,43 @@ def plot_soft_blending(metrics: dict):
     always_mini_acc = ref.get("always_mini", {}).get("overall", 0)
 
     thresholds = data["thresholds"]
-    cost_ratios = [t["effective_cost_ratio"] for t in thresholds]
     accs = [t["accuracy"] for t in thresholds]
     weights = [t["mean_weight"] for t in thresholds]
 
     # Find best point
     best_idx = max(range(len(accs)), key=lambda i: accs[i])
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+    fig, ax = plt.subplots(figsize=(7, 5))
 
-    # Left: accuracy vs cost ratio
-    ax1.plot(cost_ratios, accs, color="#C44E52", linewidth=2)
-    ax1.scatter(
-        [cost_ratios[best_idx]],
+    ax.plot(weights, accs, color="#C44E52", linewidth=2)
+    ax.scatter(
+        [weights[best_idx]],
         [accs[best_idx]],
         color="#C44E52",
         s=80,
         zorder=5,
-        label=f"Best: {accs[best_idx]:.1%} at {cost_ratios[best_idx]:.2f}×",
+        label=f"Best: {accs[best_idx]:.1%} at w={weights[best_idx]:.2f}",
     )
-    ax1.axhline(
+    ax.axhline(
         y=always_full_acc,
         color="gray",
         linestyle=":",
         alpha=0.7,
         label=f"Full model k=8 ({always_full_acc:.1%})",
     )
-    ax1.axhline(
+    ax.axhline(
         y=always_mini_acc,
         color="orange",
         linestyle=":",
         alpha=0.7,
-        label=f"Always mini ({always_mini_acc:.1%})",
+        label=f"Mini model k=8 ({always_mini_acc:.1%})",
     )
-    ax1.set_xlabel("Cost ratio (relative to full model k=8)")
-    ax1.set_ylabel("Accuracy")
-    ax1.set_title("Accuracy vs Cost")
-    ax1.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f"{y:.0%}"))
-    ax1.legend(fontsize=9)
+    ax.set_xlabel("Mean blend weight $w$ (0 = all mini, 1 = all full)")
+    ax.set_ylabel("Accuracy")
+    ax.set_title("Soft Blending: Accuracy vs Blend Weight")
+    ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f"{y:.0%}"))
+    ax.legend(fontsize=9)
 
-    # Right: accuracy vs mean blend weight
-    ax2.plot(weights, accs, color="#C44E52", linewidth=2)
-    ax2.scatter([weights[best_idx]], [accs[best_idx]], color="#C44E52", s=80, zorder=5)
-    ax2.axhline(
-        y=always_full_acc,
-        color="gray",
-        linestyle=":",
-        alpha=0.7,
-        label=f"Full model k=8 ({always_full_acc:.1%})",
-    )
-    ax2.axhline(
-        y=always_mini_acc,
-        color="orange",
-        linestyle=":",
-        alpha=0.7,
-        label=f"Always mini ({always_mini_acc:.1%})",
-    )
-    ax2.set_xlabel("Mean blend weight $w$ (0 = all mini, 1 = all full)")
-    ax2.set_ylabel("Accuracy")
-    ax2.set_title("Accuracy vs Blend Weight")
-    ax2.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f"{y:.0%}"))
-    ax2.legend(fontsize=9)
-
-    fig.suptitle(
-        "Soft Blending: Sigmoid-Weighted Mini + Full Model Scores", fontsize=13
-    )
     fig.tight_layout()
     _save(fig, "soft_blending")
 
@@ -451,7 +437,7 @@ def plot_per_response_escalation_pareto(metrics: dict):
         color="orange",
         linestyle=":",
         alpha=0.7,
-        label=f"Always mini ({always_mini_acc:.1%})",
+        label=f"Mini model k=8 ({always_mini_acc:.1%})",
     )
 
     ax.set_xlabel("Cost ratio (relative to full model k=8)")
@@ -807,7 +793,7 @@ def plot_variance_informed_ensembling(metrics: dict):
             color="orange",
             linestyle=":",
             alpha=0.7,
-            label=f"Always mini ({always_mini_acc:.1%})",
+            label=f"Mini model k=8 ({always_mini_acc:.1%})",
         )
 
     ax.set_xlabel("Cost ratio (relative to full model k=8)")

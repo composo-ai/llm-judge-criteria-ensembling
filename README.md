@@ -1,8 +1,9 @@
 # Practical Techniques for Improving LLM-as-Judge Accuracy on RewardBench 2
 
-**Author:** Ryan Lail
+**Author:** Ryan Lail<br>
+**Affiliation:** Composo AI
 
-Ablation study testing practical techniques to improve LLM-as-judge accuracy on [RewardBench 2](https://huggingface.co/datasets/allenai/reward-bench-2) (ratings mode). See [WRITEUP.md](WRITEUP.md) for full methodology, mathematical derivations, and analysis.
+Ablation study testing practical techniques to improve LLM-as-judge accuracy on [RewardBench 2](https://huggingface.co/datasets/allenai/reward-bench-2) (ratings mode). See [TECHNICAL_REPORT.md](TECHNICAL_REPORT.md) for full methodology, mathematical derivations, and analysis.
 
 ## Setup
 
@@ -48,10 +49,10 @@ python analysis/figures.py
 | Calibration (cross-category) | 1614 | 73.0% | 79.1% | 70.8% | 66.3% | 32.9% | 87.4% | $0.0209 | 1.6× |
 | Ensemble k=8 | 1754 | 80.8% | 86.1% | 80.6% | 76.5% | 40.9% | 91.6% | $0.0667 | 5.0× |
 | Mini model k=8 † | 1706 | 79.0% | 83.4% | 79.6% | 68.4% | 39.3% | 91.6% | $0.0051 | 0.4× |
-| Soft blend (best) † | 1721 | 84.5% | **89.5%** | 84.3% | 78.6% | 51.3% | 93.2% | $0.0390 | 2.9× |
-| Var-informed (≤2 calls) † | 1705 | 75.3% | 80.6% | 75.5% | 67.1% | 38.7% | 88.4% | $0.0210 | 1.6× |
+| Soft blend (best) † | 1721 | 83.7% | **89.1%** | 83.3% | 78.0% | 50.7% | 92.0% | $0.0715 | 5.4× |
+| Var-informed (≤2 calls) † | 1702 | 75.4% | 79.6% | 73.0% | 67.1% | 38.0% | 90.5% | $0.0216 | 1.6× |
 | Combined | 1698 | 83.0% | 86.9% | 82.1% | 76.5% | 50.7% | 93.8% | $0.0773 | 5.8× |
-| **Combined + soft blend** † | 1698 | **85.4%** | 89.1% | **85.5%** | **79.4%** | **54.7%** | **94.5%** | $0.0595 | 4.4× |
+| **Combined + soft blend** † | 1698 | **84.9%** | 88.2% | **85.3%** | **79.4%** | **51.3%** | **94.8%** | $0.0773 | 5.8× |
 
 ## File Structure
 

@@ -1,22 +1,25 @@
 # Practical Techniques for Improving LLM-as-Judge Accuracy on RewardBench 2
 
+**Author:** Ryan Lail<br>
+**Affiliation:** Composo AI
+
 ## Abstract
 
-LLM-as-judge — using a language model to score or rank candidate responses — is increasingly used as a scalable alternative to human evaluation in RLHF pipelines and benchmarking. However, the reliability of these judgments depends heavily on how the judge is prompted and how scores are aggregated. We present a systematic ablation study of five practical techniques applied to a GPT-5.4 judge on RewardBench 2: task-specific criteria injection, calibration context, response-score ensembling, adaptive model escalation, and their combination. Our baseline achieves 72.1% accuracy. Task-specific criteria provide a free +3.2% gain. Ensemble scoring (k=8) adds +8.7% at 5× cost. Soft-blend escalation — combining a cheap mini model with a full model via a sigmoid weight — achieves **85.4%** accuracy at 4.4× baseline cost, a +13.3% improvement. We analyse variance as an error signal, characterise diminishing returns of ensembling, and show that all improvements are additive when combined.
+LLM-as-judge — using a language model to score or rank candidate responses — is increasingly used as a scalable alternative to human evaluation in RLHF pipelines, benchmarking, offline testing, monitoring, and guardrails. However, the reliability of these judgments depends heavily on how the judge is prompted and how scores are aggregated. We present a systematic ablation study of five practical techniques applied to a GPT-5.4 judge on RewardBench 2: task-specific criteria injection, calibration context, ensemble scoring, adaptive model escalation, and their combination. Our baseline achieves 72.1% accuracy. Task-specific criteria provide a +3.2% gain at no additional cost. Ensemble scoring (k=8) adds +8.7% at 5× cost. Combining all techniques with per-response soft blending — weighting mini and full model scores via a sigmoid on each response's variance — achieves **84.9%** accuracy, a +12.8% improvement over baseline. We also find that GPT-5.4 mini with k=8 achieves 79.0% at just 0.4× baseline cost, dominating the low-cost Pareto frontier. We analyse variance as an error signal, characterise diminishing returns of ensembling, and show that all improvements are additive when combined. Crucially, none of these techniques require finetuning, making them drop-in additions to any project already using LLM judges.
 
 ---
 
 ## 1. Introduction
 
-LLM-as-judge has emerged as the dominant approach for scalable automated evaluation of language model outputs. A judge model rates or ranks candidate responses, providing a signal that can be used for reward modelling, benchmarking, or direct feedback in post-training pipelines. Despite its wide adoption, the reliability of LLM judges varies considerably across prompting strategies and aggregation methods.
+LLM-as-judge has emerged as the dominant approach for scalable automated evaluation of language model outputs. A judge model rates or ranks candidate responses, providing a signal that can be used for reward modelling, benchmarking, or direct feedback in post-training pipelines. Beyond training, LLM judges are increasingly deployed in production systems — as offline test suites that gate releases on output quality, and as real-time monitors that flag regressions or policy violations in deployed applications. Despite this wide adoption, the reliability of LLM judges varies considerably across prompting strategies and aggregation methods.
 
-RewardBench 2 (RB2) provides a standardised evaluation of judge quality across five categories: Factuality, Instruction Following (Focus), Mathematics, Precise Instruction Following (Precise IF), and Safety. Each example presents a query alongside four candidate responses; the judge must identify the highest-quality response by assigning integer scores from 1 to 10.
+RewardBench 2 (RB2) provides a standardised evaluation of judge quality across five categories: Factuality, Focus, Mathematics, Precise IF, and Safety. Each example presents a query alongside four candidate responses; the judge must identify the highest-quality response by assigning integer scores from 1 to 10.
 
 We investigate five orthogonal techniques for improving judge accuracy:
 
-1. **Task-specific criteria** — augmenting the generic RB2 judge prompt with a category-aware one-sentence criterion
-2. **Calibration context** — injecting a previously scored reference example to anchor the judge's scoring scale
-3. **Ensemble scoring** — requesting k independent completions and taking the mean score
+1. **Ensemble scoring** — requesting k independent completions and taking the mean score
+2. **Task-specific criteria** — augmenting the generic RB2 judge prompt with a category-aware one-sentence criterion
+3. **Calibration context** — injecting a previously scored reference example to anchor the judge's scoring scale
 4. **Adaptive model escalation** — using a cheaper mini model for easy examples and escalating to a full model when variance is high
 5. **Combination** — applying all techniques simultaneously
 
@@ -28,7 +31,7 @@ We run each condition on the full RB2 test set and analyse the cost–accuracy t
 
 ### 2.1 Dataset
 
-We use the RewardBench 2 test split, excluding the Ties subset (which uses a different evaluation protocol). The remaining 1,753 examples span five categories:
+We use the RewardBench 2, excluding the Ties subset (which uses a different evaluation protocol). The remaining 1,753 examples span five categories:
 
 | Category | N | Description |
 |----------|---|-------------|
@@ -42,11 +45,11 @@ Each example contains a query and exactly four candidate responses. Response 0 i
 
 ### 2.2 Evaluation Protocol
 
-Each example consists of a query $q$ and four candidate responses $r_0, r_1, r_2, r_3$, where $r_0$ is always the correct (chosen) response. A judge $f$ assigns an integer score $s_{ij} \in \{1, \ldots, 10\}$ to each response $r_i$ on each of $k$ independent calls, where $k=1$ in the baseline and $k>1$ under ensemble conditions. The mean score for response $i$ across $k$ calls is $\bar{s}_i = \frac{1}{k}\sum_{j=1}^k s_{ij}$.
+Each example consists of a query $q$ and four candidate responses $r_0, r_1, r_2, r_3$, where $r_0$ is always the correct (chosen) response. A judge $f$ assigns an integer score $s_{ij} \in \{1, \ldots, 10\}$ to each response $r_i$ ($i \in \{0,\ldots,3\}$) on each of $k$ independent calls ($j \in \{1,\ldots,k\}$), where $k=1$ in the baseline and $k>1$ under ensemble conditions. The mean score for response $i$ across $k$ calls is $\bar{s}_i = \frac{1}{k}\sum_{j=1}^k s_{ij}$.
 
 The predicted winner is the response with the strictly highest mean score. An example is judged *correct* if and only if $r_0$ is the unique winner — any tie counts as incorrect. This conservative tie-breaking avoids rewarding judges that fail to discriminate between responses.
 
-When running both a mini and a full model (Sections 3.5–3.6), we write $\bar{s}_i^{\text{mini}}$ and $\bar{s}_i^{\text{full}}$ for their respective mean scores. We define the per-response score standard deviation $\sigma_i = \text{std}(s_{i,1}, \ldots, s_{i,k})$ and the example-level variance $\sigma_{\text{ex}} = \frac{1}{4}\sum_{i=0}^{3} \sigma_i$ as the mean standard deviation across all four responses. $C_{\text{mini}}$ and $C_{\text{full}}$ denote the total API cost of running all mini and full model calls on a given example.
+When running both a mini and a full model (Sections 3.5–3.6), we write $\bar{s}_i^{\text{mini}}$ and $\bar{s}_i^{\text{full}}$ for their respective mean scores. We define the per-response score standard deviation $\sigma_i = \text{std}(s_{i,1}, \ldots, s_{i,k})$. $C_{\text{mini}}$ and $C_{\text{full}}$ denote the total API cost of running all mini and full model calls on a given example.
 
 ### 2.3 Models and Costs
 
@@ -55,7 +58,7 @@ When running both a mini and a full model (Sections 3.5–3.6), we write $\bar{s
 | GPT-5.4 | $2.50 | $15.00 | Full judge |
 | GPT-5.4 mini | $0.25 | $1.50 | Cheap proxy |
 
-All experiments use temperature 1.0, `reasoning_effort="none"`, and a maximum of 4,096 output tokens per completion. Costs are computed from actual token usage logs and reported as USD per example.
+All experiments use temperature 1.0, `reasoning_effort="none"`, and a maximum of 4,096 output tokens per completion. Ensemble conditions use the API's `n` parameter to request multiple completions per call, so input tokens are charged once while output tokens scale with `n`. Costs are computed from actual token usage as reported by the API and reported as mean USD per example, where "per example" reflects the total cost of determining a winner for one RB2 question — including all response scorings, ensemble calls, calibration overhead, and any dual-model calls required by that condition.
 
 ### 2.4 Base Prompt
 
@@ -84,7 +87,7 @@ Notes:
 [Your judgement]
 ```
 
-Score parsing extracts the last integer in the response; any reply not ending with a 1–10 integer is treated as an error and retried (up to 3 attempts with exponential backoff).
+Score parsing extracts the last integer in the response; any reply not ending with a 1–10 integer is treated as an error and retried (up to 3 attempts with exponential backoff). Additionally, some queries are refused by Azure OpenAI's content filtering guardrails and cannot be scored; since refusal rates vary by prompt configuration, different experimental conditions may have slightly different sample sizes.
 
 ---
 
@@ -94,11 +97,11 @@ Score parsing extracts the last integer in the response; any reply not ending wi
 
 The baseline condition applies the RB2 prompt verbatim with $k=1$ completion per response — four API calls per example, all using the full GPT-5.4 model. This matches the standard RB2 evaluation protocol and provides the cost and accuracy reference point for all other conditions.
 
-**Result**: 72.1% accuracy, $0.0134/example.
+**Result**: 72.1% accuracy, mean cost $0.0134/example.
 
 ### 3.2 Ensemble Scoring (k=8)
 
-**Motivation.** LLM outputs at temperature > 0 are stochastic. A single draw may be unrepresentative of the judge's true belief about a response. Taking the mean over $k$ independent completions reduces variance and improves accuracy, analogous to Monte Carlo estimation.
+**Motivation.** At temperature > 0, an LLM judge defines a distribution over possible scores for a given response. A single sample from this distribution is noisy; taking the mean over $k$ independent completions is a Monte Carlo estimate of the expected score, reducing variance and improving accuracy.
 
 **Method.** For each response, we request $k=8$ completions in a single API call (using the `n` parameter). The winning response is determined by the mean score across all $k$ draws:
 
@@ -227,11 +230,9 @@ We test four variants:
 
 **Data collection.** We run both models (mini n=8, full n=8) on every example. This gives us paired data for all downstream escalation strategies without additional API calls.
 
-**Variance as an error signal.** We compute the example-level mini variance as the mean standard deviation of scores across the four responses:
+**Variance as an error signal.** Each response's score variance $\sigma_i = \text{std}(s_{i,1}, \ldots, s_{i,k})$ (as defined in Section 2.2) serves as the routing signal. Since each judge call is independent, all escalation strategies operate at the per-response level — each response's own variance determines how it is scored, rather than averaging variance across the four responses.
 
-$$\sigma_{\text{example}} = \frac{1}{4}\sum_{i=0}^{3} \text{std}(s_{i,1}, \ldots, s_{i,k})$$
-
-Pearson correlation between $\sigma_{\text{example}}$ and correctness (binary) is $r = -0.15$: high variance examples are more likely to be judged incorrectly. Mini and full model variances are positively correlated ($r = 0.272$), validating mini variance as a proxy for full model uncertainty.
+Pearson correlation between per-response variance and correctness (binary) is $r = -0.15$: high variance responses are more likely to be judged incorrectly. Mini and full model variances are positively correlated ($r = 0.272$), validating mini variance as a proxy for full model uncertainty.
 
 ![Variance Error Signal](figures/variance_error_signal.png)
 *Figure 2: Distribution of ensemble score variance for correct vs incorrect judgments. Incorrect judgments exhibit higher variance, validating variance as an error signal.*
@@ -245,7 +246,9 @@ We evaluate four escalation strategies offline on the collected data.
 
 #### 3.5.1 Hard Variance Routing
 
-For each individual response, use the full model score if the mini std exceeds a threshold $\theta$. Here $s_i^{\text{eff}}$ is the effective score for response $i$ — the value that gets used to determine the winner:
+**Motivation.** The simplest escalation strategy: if the mini model is uncertain about a response (high variance), discard its score and use the full model instead. This is a binary decision per response — mini or full, with no blending.
+
+**Method.** For each individual response, use the full model score if the mini std exceeds a threshold $\theta$. Here $s_i^{\text{eff}}$ is the effective score for response $i$ — the value that gets used to determine the winner:
 
 $$s_i^{\text{eff}} = \begin{cases} s_i^{\text{full}} & \text{if } \text{std}(s_{i,1}^{\text{mini}}, \ldots, s_{i,k}^{\text{mini}}) \geq \theta \\ s_i^{\text{mini}} & \text{otherwise} \end{cases}$$
 
@@ -257,41 +260,47 @@ where $C_{\text{mini}}$ and $C_{\text{full}}$ are the fixed costs of running all
 
 ![Per-Response Escalation Pareto](figures/per_response_escalation_pareto.png)
 
-*Figure 4: Pareto frontier for per-response escalation. Each point is a different threshold $\theta$. The frontier has a large dead zone in the middle: escalating some but not all responses rarely changes the winner, since accuracy depends on relative rankings across all four responses. Meaningful operating points cluster near mini model k=8 (cheap) or full model k=8 (expensive), with little gain in between. Example-level thresholding — escalating all four responses together when $\sigma_{\text{ex}} \geq \theta$ — shows the same behaviour and offers no practical advantage.*
+*Figure 4: Pareto frontier for per-response escalation. Each point is a different threshold $\theta$. The frontier has a large dead zone in the middle: escalating some but not all responses rarely changes the winner, since accuracy depends on relative rankings across all four responses. Meaningful operating points cluster near mini model k=8 (cheap) or full model k=8 (expensive), with little gain in between.*
 
 #### 3.5.2 Soft Blending (Sigmoid)
 
-**Motivation.** Each model can be modelled as a noisy estimator of true response quality. Letting $\mu_i$ denote the true quality of response $i$, $b_i^m$ the systematic bias of model $m$, and $\epsilon_{ij}^m$ zero-mean noise:
+**Motivation.** Each model can be modelled as a noisy estimator of true response quality. Letting $\mu_i$ denote the true quality of response $i$, $b_i^m$ the systematic bias of model $m$, and $\epsilon_{ij}^m$ random noise ($\mathbb{E}[\epsilon_{ij}^m] = 0$):
 
 $$s_{ij}^m = \mu_i + b_i^m + \epsilon_{ij}^m$$
 
-As $k \to \infty$, ensembling eliminates noise but not bias: $\bar{s}_i^m \to \mu_i + b_i^m$. A blend of the two model means has effective bias $(1-w)b_i^{\text{mini}} + w b_i^{\text{full}}$. If the two models' biases are partially independent — they make different systematic errors — the blend can have lower effective bias than either model alone. This is why soft blending can *outperform* full model k=8 at the right $w$, not just interpolate between them.
+where $j \in \{1, \ldots, k\}$ indexes the independent calls. As $k \to \infty$, ensembling eliminates noise but not bias, so the mean score approaches $\bar{s}_i^m = \mu_i + b_i^m$. At finite $k$, each model's mean score also carries sampling noise. The bias-variance decomposition gives $\text{MSE} = \text{Bias}^2 + \text{Variance}$, so reducing variance directly reduces total error even if bias is unchanged. The variance of a weighted combination of two estimators is:
 
-**Method.** Rather than hard escalation, we blend mini and full model scores continuously using a sigmoid weight:
+$$\text{Var}((1-w)\bar{s}_i^{\text{mini}} + w\bar{s}_i^{\text{full}}) = (1-w)^2\sigma_{\text{mini}}^2 + w^2\sigma_{\text{full}}^2 + 2w(1-w)\rho\,\sigma_{\text{mini}}\sigma_{\text{full}}$$
 
-$$w(\sigma, m) = \text{sigmoid}\!\left(10 \cdot (\sigma_{\text{example}} - m)\right) = \frac{1}{1 + e^{-10(\sigma_{\text{example}} - m)}}$$
+When $\rho < 1$, there exists a $w^*$ where this is strictly less than both $\sigma_{\text{mini}}^2$ and $\sigma_{\text{full}}^2$. We confirm empirically that mini and full model score variances are imperfectly correlated ($\rho = 0.272$, Section 3.5), and hypothesise that this variance reduction translates to more reliable ranking of responses, explaining why soft blending outperforms full model k=8 in our experiments.
 
-$$s_i^{\text{eff}} = (1 - w) \cdot \bar{s}_i^{\text{mini}} + w \cdot \bar{s}_i^{\text{full}}$$
+**Method.** Rather than hard escalation, we blend mini and full model scores continuously using a per-response sigmoid weight:
 
-The midpoint $m$ controls where the transition from mini-dominant to full-dominant scoring occurs. Steepness is fixed at 10 (making the transition sharp within a variance range of ~0.4). The optimal $m$ is found by sweeping over all unique example variance values.
+$$w_i(\sigma_i, m) = \text{sigmoid}\!\left(10 \cdot (\sigma_i - m)\right) = \frac{1}{1 + e^{-10(\sigma_i - m)}}$$
 
-> **Note on cost.** Soft blending always uses all mini and full model calls — no API calls are saved. The effective cost ratio relative to "always full" reflects the *blending weight*, not actual call savings. The reported cost ($0.0390/example) incorporates the actual mini + full token costs at the optimal blend ratio. A natural extension would be to reduce ensemble size for both models (e.g. k=3 mini + k=3 full) and re-evaluate: given the diminishing returns observed in Section 3.2, it is plausible that much of the soft blend accuracy gain is preserved at substantially lower cost.
+$$s_i^{\text{eff}} = (1 - w_i) \cdot \bar{s}_i^{\text{mini}} + w_i \cdot \bar{s}_i^{\text{full}}$$
+
+Each response's own variance $\sigma_i$ determines its blend weight independently. The midpoint $m$ controls where the transition from mini-dominant to full-dominant scoring occurs. Steepness is fixed at 10 (making the transition sharp within a variance range of ~0.4). The optimal $m$ is found by sweeping over all unique per-response variance values.
+
+> **Note on cost.** Soft blending always runs all mini and full model calls, so its cost is the same as running both models ($0.0715/example, 5.4× baseline). The accuracy gain over full model k=8 comes at no additional cost beyond the mini model overhead. A natural extension would be to reduce ensemble size for both models (e.g. k=3 mini + k=3 full) and re-evaluate: given the diminishing returns observed in Section 3.2, it is plausible that much of the soft blend accuracy gain is preserved at substantially lower cost.
 
 ![Soft Blending](figures/soft_blending.png)
-*Figure 5: Soft blending accuracy vs cost ratio (left) and vs mean blend weight $w$ (right). The optimal midpoint $m$ achieves 84.5% accuracy at a blend weight of ~0.5, outperforming both mini model k=8 (79.0%) and full model k=8 (81.8%). Accuracy degrades on both sides: too low $m$ relies too heavily on the mini model; too high $m$ discards the useful mini signal.*
+*Figure 5: Per-response soft blending accuracy vs mean blend weight $w$. The optimal midpoint $m$ achieves 83.7% accuracy at a mean blend weight of ~0.65, outperforming both mini model k=8 (79.0%) and full model k=8 (81.8%). Accuracy degrades on both sides: too low $w$ relies too heavily on the mini model; too high $w$ discards the useful mini signal.*
 
 #### 3.5.3 Variance-Informed Ensembling
 
-Rather than choosing between mini and full model entirely, we use mini variance to determine **how many full model calls** to make per example. Easy examples (low variance) use $n_2 = 1$ full model call; hard examples use up to $n_2 = n_{\max} = 8$:
+**Motivation.** Hard routing and soft blending both use a fixed ensemble size (k=8) for both models. But Section 3.2 showed diminishing returns beyond k=3 — most responses don't need 8 calls. If we can identify which responses need more calls, we can allocate budget where it matters most.
 
-$$n_2(\sigma) = \begin{cases} 1 & \text{if } \sigma \leq \sigma_1 \\ 1 + \dfrac{(\sigma - \sigma_1)(n_{\max} - 1)}{\sigma_2 - \sigma_1} & \text{if } \sigma_1 < \sigma < \sigma_2 \\ n_{\max} & \text{if } \sigma \geq \sigma_2 \end{cases}$$
+**Method.** Rather than choosing between mini and full model entirely, we use each response's mini variance to determine $n_{\text{full},i}$, the number of full model calls for that response. Low-variance responses use $n_{2,i} = 1$; high-variance responses use up to $n_{2,i} = n_{\max} = 8$:
 
-Parameters $(\sigma_1, \sigma_2)$ are found by grid search over the 15th–95th percentile range of observed example variances. For each $(\sigma_1, \sigma_2)$, we compute accuracy by subsampling the first $n_2(\sigma)$ full model scores per example — no additional API calls needed.
+$$n_{\text{full},i}(\sigma_i) = \begin{cases} 1 & \text{if } \sigma_i \leq \sigma_1 \\ 1 + \dfrac{(\sigma_i - \sigma_1)(n_{\max} - 1)}{\sigma_2 - \sigma_1} & \text{if } \sigma_1 < \sigma_i < \sigma_2 \\ n_{\max} & \text{if } \sigma_i \geq \sigma_2 \end{cases}$$
 
-The **budget-constrained** variant restricts mean $n_2 \leq 2.0$, achieving 75.3% accuracy at just 1.6× baseline cost (vs 81.8% for full model k=8 at 5.3× cost).
+Parameters $(\sigma_1, \sigma_2)$ are found by grid search over the 15th–95th percentile range of observed per-response variances, excluding extremes where the thresholds would have negligible effect. For each $(\sigma_1, \sigma_2)$, we compute accuracy by subsampling the first $n_{\text{full},i}(\sigma_i)$ full model scores for each response — no additional API calls needed.
+
+The **budget-constrained** variant restricts mean $n_{\text{full}} \leq 2.0$, achieving 75.4% accuracy at just 1.6× baseline cost (vs 81.8% for full model k=8 at 5.3× cost).
 
 ![Variance-Informed Ensembling](figures/variance_informed_ensembling.png)
-*Figure 6: Pareto frontier for variance-informed ensembling (black) vs fixed-k full model (blue). Each gray point is a grid search configuration $(\sigma_1, \sigma_2)$. The Pareto frontier lies above the fixed-k line at low-to-medium cost, showing that adaptive routing extracts more accuracy per dollar than naively reducing k. At very low cost ratios, fixed k=1 full is competitive because variance-informed routing always incurs a fixed overhead from running mini n=8 first — the variance signal must pay for itself before adaptive allocation becomes worthwhile. The budget-constrained optimum (green star, 75.3% at 0.29× cost) and best overall (red star, 81.8% at 0.95× cost) are highlighted.*
+*Figure 6: Pareto frontier for per-response variance-informed ensembling (black) vs fixed-k full model (blue). Each gray point is a grid search configuration $(\sigma_1, \sigma_2)$. The Pareto frontier lies above the fixed-k line at low-to-medium cost, showing that adaptive routing extracts more accuracy per dollar than naively reducing k. At very low cost ratios, fixed k=1 full is competitive because variance-informed routing always incurs a fixed overhead from running mini n=8 first — the variance signal must pay for itself before adaptive allocation becomes worthwhile. The budget-constrained optimum (green star, 75.4% at 0.30× cost) and best overall (red star, 81.3% at 0.84× cost) are highlighted.*
 
 **Summary of escalation strategies** (costs relative to k=1 full model baseline at $0.0134/example):
 
@@ -300,10 +309,11 @@ The **budget-constrained** variant restricts mean $n_2 \leq 2.0$, achieving 75.3
 | k=1 full (baseline) | 72.1% | $0.0134 | 1.0× |
 | Full model k=8 | 81.8% | $0.0715 | 5.3× |
 | Hard variance routing (θ=0.0) | 81.8% | $0.0713 | 5.3× |
-| Soft blend (best m) | **84.5%** | $0.0390 | 2.9× |
-| Var-informed (≤2 calls) | 75.3% | $0.0210 | 1.6× |
+| Hard variance routing (θ=0.78) | 79.4% | $0.0125 | 0.9× |
+| Soft blend (best m) | **83.7%** | $0.0715 | 5.4× |
+| Var-informed (≤2 calls) | 75.4% | $0.0216 | 1.6× |
 
-Soft blending achieves 84.5% accuracy at 2.9× the cost of a single full model call — **outperforming full model k=8 (81.8%) while costing less than half as much**.
+Soft blending achieves 83.7% accuracy at the same cost as full model k=8 ($0.0715/example, 5.4×) — **outperforming it by +1.9pp with no additional spend**.
 
 ### 3.6 Combined Condition
 
@@ -313,7 +323,7 @@ Soft blending achieves 84.5% accuracy at 2.9× the cost of a single full model c
 
 The calibration "low" variant is used as default (slightly best-performing in isolation, and by showing a known-bad example it may sharpen discrimination at the top of the scale).
 
-**Result**: 83.0% accuracy at $0.0773/example (5.8× baseline). Applying soft blending on top yields **85.4%** — the best overall result, at 4.4× baseline cost.
+**Result**: 83.0% accuracy at $0.0773/example (5.8× baseline). Applying per-response soft blending on top yields **84.9%** — the best overall result, at the same cost.
 
 ---
 
@@ -333,13 +343,13 @@ The calibration "low" variant is used as default (slightly best-performing in is
 | Calibration (cross-category) | 1614 | 73.0% | 79.1% | 70.8% | 66.3% | 32.9% | 87.4% | $0.0209 | 1.6× |
 | Ensemble k=8 | 1754 | 80.8% | 86.1% | 80.6% | 76.5% | 40.9% | 91.6% | $0.0667 | 5.0× |
 | Mini model k=8 † | 1706 | 79.0% | 83.4% | 79.6% | 68.4% | 39.3% | 91.6% | $0.0051 | 0.4× |
-| Soft blend (best) † | 1721 | 84.5% | **89.5%** | 84.3% | 78.6% | 51.3% | 93.2% | $0.0390 | 2.9× |
-| Var-informed (≤2 calls) † | 1705 | 75.3% | 80.6% | 75.5% | 67.1% | 38.7% | 88.4% | $0.0210 | 1.6× |
+| Soft blend (best) † | 1721 | 83.7% | **89.1%** | 83.3% | 78.0% | 50.7% | 92.0% | $0.0715 | 5.4× |
+| Var-informed (≤2 calls) † | 1702 | 75.4% | 79.6% | 73.0% | 67.1% | 38.0% | 90.5% | $0.0216 | 1.6× |
 | Combined | 1698 | 83.0% | 86.9% | 82.1% | 76.5% | 50.7% | 93.8% | $0.0773 | 5.8× |
-| **Combined + soft blend** † | 1698 | **85.4%** | 89.1% | **85.5%** | **79.4%** | **54.7%** | **94.5%** | $0.0595 | 4.4× |
+| **Combined + soft blend** † | 1698 | **84.9%** | 88.2% | **85.3%** | **79.4%** | **51.3%** | **94.8%** | $0.0773 | 5.8× |
 
 ![Hero Accuracy](figures/hero_accuracy.png)
-*Figure 7: Accuracy by condition and category (visual representation of Table 1). Techniques stack from baseline (72.1%) through criteria (+3.2pp), calibration (+2pp), ensemble (+8.7pp), up to soft blend and combined (85.4%). Precise IF remains the hardest category across all conditions.*
+*Figure 7: Accuracy by condition and category (visual representation of Table 1). Techniques stack from baseline (72.1%) through criteria (+3.2pp), calibration (+2pp), ensemble (+8.7pp), up to soft blend and combined (84.9%). Precise IF remains the hardest category across all conditions.*
 
 ### 4.2 Cost–Accuracy Pareto Frontier
 
@@ -361,7 +371,7 @@ A key finding is that the three main technique classes (prompt quality, scoring 
 | Calibration (low) alone | 74.2% | +2.1pp |
 | Ensemble alone | 80.8% | +8.7pp |
 | Combined (all three) | 83.0% | +10.9pp |
-| Combined + soft blend | 85.4% | +13.3pp |
+| Combined + soft blend | 84.9% | +12.8pp |
 
 The combined condition (83.0%) falls slightly short of the naive sum-of-isolated-improvements (72.1% + 3.2 + 2.1 + 8.7 = 86.1%), suggesting mild saturation as techniques overlap on the same hard examples. Nevertheless, the improvements are largely additive — each technique contributes meaningfully when combined. Note that the combined experiment uses dual-model scoring (mini + full n=8) rather than single-model ensemble, so the conditions are not perfectly matched; the comparison is approximate.
 
@@ -391,39 +401,38 @@ Agreement plateaus at ~80% by $k=3–5$. The ceiling is not a data limitation �
 
 ### 5.4 Soft Blending vs Hard Escalation
 
-Soft blending consistently outperforms both per-response and per-example hard escalation at every cost level (see Figure 5). Hard escalation is a step function: once variance crosses a threshold, it switches entirely to the full model. Soft blending provides a smoother transition, effectively weighting mini and full model signals in proportion to the judge's uncertainty. This explains why it can *exceed* the accuracy of always using the full model (84.5% vs 81.8%): it combines information from both models rather than discarding mini model scores.
+Soft blending consistently outperforms hard escalation at every cost level (see Figure 5). Hard escalation is a step function: once variance crosses a threshold, it switches entirely to the full model. Soft blending provides a smoother transition, effectively weighting mini and full model signals in proportion to each response's uncertainty. This explains why it can *exceed* the accuracy of always using the full model (83.7% vs 81.8%): it combines information from both models rather than discarding mini model scores.
 
 ---
 
-## 6. Discussion and Conclusion
-
-### Key Takeaways
-
-1. **Criteria injection is the best cost/accuracy tradeoff.** +3.2pp at essentially zero marginal cost (a longer prompt). Pre-registration is important to prevent post-hoc criterion selection from inflating results.
-
-2. **Ensembling has diminishing returns.** k=3 captures ~70% of the k=8 gain at 3/8 the cost. k=8 is rarely necessary.
-
-3. **Calibration context helps modestly but consistently.** The "low" variant (showing a rejected example as reference) slightly outperforms "high". The effect is not category-specific — cross-category calibration performs identically — suggesting the mechanism is general anchoring rather than domain knowledge.
-
-4. **Soft blending is the best aggregation strategy.** It outperforms pure full-model scoring by combining information from both models. The sigmoid formulation smoothly interpolates between model signals rather than making hard routing decisions.
-
-5. **Variance-informed routing is the best cost-constrained strategy.** At a budget of ~2 full model calls per example, it achieves 75.3% — better than baseline at 1.6× cost. This is a practical choice for production settings where full ensemble cost is prohibitive.
-
-6. **All techniques are additive.** The combined condition (83.0%) and its soft-blend variant (85.4%) confirm that prompt quality and scoring robustness improvements stack without significant interference.
+## 6. Discussion
 
 ### Limitations
 
 - All experiments use a single judge model family (GPT-5.4). Generalisability to other models (e.g., Claude, Gemini) is untested.
 - RewardBench 2 is a single benchmark. Performance may differ on in-distribution reward modelling tasks in production RLHF pipelines.
-- Calibration examples are scored online (additional cost per example). A pre-scored calibration bank would reduce this overhead.
-- Soft blend parameters (steepness, midpoint) are optimised on the same data they are evaluated on. The reported 84.5% is therefore an upper bound on out-of-sample performance; a held-out validation split would give a less optimistic estimate.
+- Soft blend parameters (steepness, midpoint) and variance-informed ensembling parameters ($\sigma_1$, $\sigma_2$) are optimised on the same data they are evaluated on. The reported accuracies for these conditions are therefore upper bounds on out-of-sample performance; a held-out validation split would give a less optimistic estimate.
+- We use per-response variance for all escalation strategies on principled grounds (each judge call is independent). However, the prior query-level approach (averaging variance across four responses) yielded slightly higher accuracy in some conditions, suggesting that the averaging may have acted as beneficial noise smoothing. We have not validated which approach generalises better to held-out data.
 
 ### Future Work
 
 - Cross-model evaluation: does soft blending still outperform hard escalation with other model pairs?
-- Online calibration bank: pre-scoring a fixed set of reference examples and selecting the best match at inference time
-- Online adaptive ensembling: current variance-informed routing requires all k calls upfront to compute variance; an online version would stop calling after each completion once variance drops below a threshold, saving cost without a separate mini model pass
+- Reduced-cost soft blending: soft blending currently requires both mini k=8 and full k=8, costing the same as running both models. Given the diminishing returns observed in Section 3.2, a blend using smaller ensemble sizes (e.g. k=3 mini + k=3 full) may preserve most of the accuracy gain at substantially lower cost.
 - Extension to pairwise ranking tasks (not just rating), where ensemble aggregation requires rank aggregation methods
+
+---
+
+## 7. Conclusion
+
+We present a systematic ablation of five practical techniques for improving LLM-as-judge accuracy on RewardBench 2:
+
+1. **Criteria injection** provides +3.2pp at essentially zero marginal cost. Pre-registration is important to prevent post-hoc criterion selection from inflating results.
+2. **Ensembling** has diminishing returns: k=3 captures ~70% of the k=8 gain at 3/8 the cost.
+3. **Calibration context** helps modestly but consistently (+2pp). The effect is not category-specific, suggesting the mechanism is general anchoring rather than domain knowledge.
+4. **Soft blending** is the best strategy for maximising accuracy, outperforming pure full-model scoring by combining information from both models via per-response sigmoid weighting.
+5. **The mini model is surprisingly competitive.** Mini model k=8 achieves 79.0% at 0.4× baseline cost, dominating most other strategies on the cost-accuracy Pareto frontier. Hard routing (θ=0.78) extends this slightly to 79.4% at 0.9× by escalating only the highest-variance responses. Variance-informed routing does not improve on these simpler approaches at comparable cost.
+
+All techniques are additive: the combined condition (83.0%) and its soft-blend variant (**84.9%**) confirm that prompt quality and scoring robustness improvements stack without significant interference. Crucially, none of these techniques require finetuning, making them drop-in additions to any project already using LLM judges.
 
 ---
 

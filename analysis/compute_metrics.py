@@ -338,157 +338,30 @@ def compute_escalation_metrics(
     }
 
 
-def compute_escalation_metrics_per_example(
-    results: list[dict], thresholds: list[float] | None = None
-) -> dict:
-    """Per-example escalation: if the example's mean mini variance exceeds the threshold,
-    escalate ALL responses to full model. Treats variance as a signal about example
-    difficulty, not individual response quality."""
-    if not results:
-        return {"thresholds": [], "reference": {}}
-
-    # Compute example-level stds for threshold generation
-    example_stds = []
-    for r in results:
-        stds = [s for s in r.get("mini_stds", []) if s is not None]
-        if stds:
-            example_stds.append(float(np.mean(stds)))
-
-    if thresholds is None:
-        if example_stds:
-            pct_thresholds = [
-                float(np.percentile(example_stds, p)) for p in range(10, 100, 10)
-            ]
-        else:
-            pct_thresholds = []
-        fixed_thresholds = [i * 0.1 for i in range(21)]
-        thresholds = sorted(set(pct_thresholds + fixed_thresholds))
-
-    # Reference points (same as per-response version)
-    def _accuracy_from_scores(results, score_key, k_sub=None):
-        adapted = [
-            {"id": r["id"], "subset": r["subset"], "all_scores": r[score_key]}
-            for r in results
-        ]
-        return compute_accuracy(adapted, k_subset=k_sub)
-
-    reference = {
-        "always_mini": _accuracy_from_scores(results, "mini_scores"),
-        "always_full": _accuracy_from_scores(results, "full_scores"),
-        "always_mini_k1": _accuracy_from_scores(results, "mini_scores", k_sub=1),
-        "always_full_k1": _accuracy_from_scores(results, "full_scores", k_sub=1),
-    }
-
-    # Cost baselines
-    total_full_cost = sum(
-        r["cost"]["full_input_tokens"] / 1e6 * GPT54_INPUT_PER_M
-        + r["cost"]["full_output_tokens"] / 1e6 * GPT54_OUTPUT_PER_M
-        for r in results
-    )
-    total_mini_cost = sum(
-        r["cost"]["mini_input_tokens"] / 1e6 * GPT54_MINI_INPUT_PER_M
-        + r["cost"]["mini_output_tokens"] / 1e6 * GPT54_MINI_OUTPUT_PER_M
-        for r in results
-    )
-    always_full_cost = total_mini_cost + total_full_cost
-
-    threshold_results = []
-    for threshold in thresholds:
-        by_subset = defaultdict(lambda: {"n": 0, "n_correct": 0})
-        total_escalated = 0
-        total_examples = 0
-
-        for r in results:
-            mini_scores = r["mini_scores"]
-            full_scores = r["full_scores"]
-            mini_stds = r.get("mini_stds", [])
-            subset = r["subset"]
-
-            # Example-level variance = mean of per-response stds
-            valid_stds = [s for s in mini_stds if s is not None]
-            example_std = float(np.mean(valid_stds)) if valid_stds else 0.0
-
-            total_examples += 1
-            escalate = example_std >= threshold
-
-            if escalate:
-                total_escalated += 1
-
-            # Use all full or all mini for this example
-            final_means = []
-            for i in range(len(mini_scores)):
-                if escalate:
-                    valid = [s for s in full_scores[i] if s is not None]
-                else:
-                    valid = [s for s in mini_scores[i] if s is not None]
-                final_means.append(float(np.mean(valid)) if valid else None)
-
-            if any(m is None for m in final_means):
-                continue
-
-            max_score = max(final_means)
-            winners = [i for i, m in enumerate(final_means) if m == max_score]
-
-            by_subset[subset]["n"] += 1
-            if len(winners) == 1 and winners[0] == 0:
-                by_subset[subset]["n_correct"] += 1
-
-        total_n = sum(s["n"] for s in by_subset.values())
-        total_correct = sum(s["n_correct"] for s in by_subset.values())
-        pct_escalated = total_escalated / total_examples if total_examples > 0 else 0.0
-
-        effective_cost = total_mini_cost + pct_escalated * total_full_cost
-        cost_ratio = effective_cost / always_full_cost if always_full_cost > 0 else 1.0
-
-        subset_metrics = {}
-        for subset, counts in sorted(by_subset.items()):
-            n = counts["n"]
-            subset_metrics[subset] = {
-                "accuracy": counts["n_correct"] / n if n > 0 else 0.0,
-                "n": n,
-                "n_correct": counts["n_correct"],
-            }
-
-        threshold_results.append(
-            {
-                "threshold": float(threshold),
-                "accuracy": total_correct / total_n if total_n > 0 else 0.0,
-                "pct_escalated": pct_escalated,
-                "effective_cost_ratio": cost_ratio,
-                "n": total_n,
-                "by_subset": subset_metrics,
-            }
-        )
-
-    return {
-        "thresholds": threshold_results,
-        "reference": {k: v for k, v in reference.items()},
-    }
-
-
 def compute_escalation_metrics_blended(
     results: list[dict], thresholds: list[float] | None = None, steepness: float = 10.0
 ) -> dict:
-    """Soft blending escalation: blend mini and full scores based on example-level variance.
+    """Soft blending escalation: blend mini and full scores based on per-response variance.
 
-    final_score = (1 - weight) * mini_mean + weight * full_mean
-    weight = sigmoid(steepness * (example_std - midpoint))
+    For each response i:
+        w_i = sigmoid(steepness * (sigma_i - midpoint))
+        final_score_i = (1 - w_i) * mini_mean_i + w_i * full_mean_i
 
     The threshold parameter sweeps the sigmoid midpoint.
     """
     if not results:
         return {"thresholds": [], "reference": {}}
 
-    example_stds = []
+    all_response_stds = []
     for r in results:
-        stds = [s for s in r.get("mini_stds", []) if s is not None]
-        if stds:
-            example_stds.append(float(np.mean(stds)))
+        for s in r.get("mini_stds", []):
+            if s is not None:
+                all_response_stds.append(float(s))
 
     if thresholds is None:
-        if example_stds:
+        if all_response_stds:
             pct_thresholds = [
-                float(np.percentile(example_stds, p)) for p in range(10, 100, 10)
+                float(np.percentile(all_response_stds, p)) for p in range(10, 100, 10)
             ]
         else:
             pct_thresholds = []
@@ -536,21 +409,20 @@ def compute_escalation_metrics_blended(
             mini_stds = r.get("mini_stds", [])
             subset = r["subset"]
 
-            valid_stds = [s for s in mini_stds if s is not None]
-            example_std = float(np.mean(valid_stds)) if valid_stds else 0.0
-
-            weight = float(_sigmoid(steepness * (example_std - midpoint)))
-            all_weights.append(weight)
-
             final_means = []
+            response_weights = []
             for i in range(len(mini_scores)):
+                std_i = float(mini_stds[i]) if i < len(mini_stds) and mini_stds[i] is not None else 0.0
+                w_i = float(_sigmoid(steepness * (std_i - midpoint)))
+                response_weights.append(w_i)
+
                 mini_valid = [s for s in mini_scores[i] if s is not None]
                 full_valid = [s for s in full_scores[i] if s is not None]
                 mini_mean = float(np.mean(mini_valid)) if mini_valid else None
                 full_mean = float(np.mean(full_valid)) if full_valid else None
 
                 if mini_mean is not None and full_mean is not None:
-                    blended = (1 - weight) * mini_mean + weight * full_mean
+                    blended = (1 - w_i) * mini_mean + w_i * full_mean
                     final_means.append(blended)
                 elif full_mean is not None:
                     final_means.append(full_mean)
@@ -558,6 +430,8 @@ def compute_escalation_metrics_blended(
                     final_means.append(mini_mean)
                 else:
                     final_means.append(None)
+
+            all_weights.extend(response_weights)
 
             if any(m is None for m in final_means):
                 continue
@@ -573,7 +447,7 @@ def compute_escalation_metrics_blended(
         total_correct = sum(s["n_correct"] for s in by_subset.values())
         mean_weight = float(np.mean(all_weights)) if all_weights else 0.0
 
-        effective_cost = total_mini_cost + mean_weight * total_full_cost
+        effective_cost = total_mini_cost + total_full_cost
         cost_ratio = effective_cost / always_full_cost if always_full_cost > 0 else 1.0
 
         subset_metrics = {}
@@ -622,8 +496,8 @@ def compute_variance_informed_ensembling(
     """Variance-informed ensembling: use mini variance to decide how many full model calls.
 
     For each (sigma1, sigma2) parameter pair, applies a piecewise linear function
-    to map example-level mini variance to n2 (number of full model calls).
-    Evaluates accuracy using the first n2 full scores per response.
+    to map per-response mini variance to n2 (number of full model calls per response).
+    Evaluates accuracy using the first n2 full scores for each response independently.
     """
     if not results:
         return {
@@ -634,14 +508,16 @@ def compute_variance_informed_ensembling(
             "by_n2": [],
         }
 
-    # Compute example-level stds
-    example_stds = []
+    # Compute per-response stds
+    per_response_stds = []
+    all_response_stds = []
     for r in results:
-        stds = [s for s in r.get("mini_stds", []) if s is not None]
-        if stds:
-            example_stds.append(float(np.mean(stds)))
-        else:
-            example_stds.append(0.0)
+        stds = []
+        for s in r.get("mini_stds", []):
+            val = float(s) if s is not None else 0.0
+            stds.append(val)
+            all_response_stds.append(val)
+        per_response_stds.append(stds)
 
     # Reference: accuracy at each fixed n2
     def _accuracy_at_fixed_k(results, k):
@@ -690,9 +566,9 @@ def compute_variance_informed_ensembling(
     )
     always_full_cost = total_mini_cost + total_full_cost
 
-    # Build grid of sigma1, sigma2 from percentiles of example stds
+    # Build grid of sigma1, sigma2 from percentiles of per-response stds
     percentiles = [
-        float(np.percentile(example_stds, p)) for p in np.linspace(0, 95, grid_steps)
+        float(np.percentile(all_response_stds, p)) for p in np.linspace(0, 95, grid_steps)
     ]
     # Add some fixed values
     fixed_vals = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.8, 1.0]
@@ -709,15 +585,16 @@ def compute_variance_informed_ensembling(
             total_examples = 0
 
             for i, r in enumerate(results):
-                ex_std = example_stds[i]
-                n2 = _piecewise_linear_n2(ex_std, sigma1, sigma2, n_max)
-                total_n2 += n2
                 total_examples += 1
 
-                # Take first n2 full scores per response
+                # Take first n2_j full scores per response, where n2_j depends on that response's variance
                 final_means = []
-                for scores in r["full_scores"]:
-                    valid = [s for s in scores[:n2] if s is not None]
+                resp_stds = per_response_stds[i]
+                for j, scores in enumerate(r["full_scores"]):
+                    std_j = resp_stds[j] if j < len(resp_stds) else 0.0
+                    n2_j = _piecewise_linear_n2(std_j, sigma1, sigma2, n_max)
+                    total_n2 += n2_j
+                    valid = [s for s in scores[:n2_j] if s is not None]
                     final_means.append(float(np.mean(valid)) if valid else None)
 
                 if any(m is None for m in final_means):
@@ -732,7 +609,8 @@ def compute_variance_informed_ensembling(
 
             total_n = sum(s["n"] for s in by_subset.values())
             total_correct = sum(s["n_correct"] for s in by_subset.values())
-            mean_n2 = total_n2 / total_examples if total_examples > 0 else 1.0
+            num_responses = 4
+            mean_n2 = total_n2 / (total_examples * num_responses) if total_examples > 0 else 1.0
 
             # Cost: mini always + (mean_n2 / n_max) * full
             effective_cost = total_mini_cost + (mean_n2 / n_max) * total_full_cost
@@ -1047,16 +925,7 @@ def main():
                     f"    threshold={tr['threshold']:.2f}: acc={tr['accuracy']:.3f}, escalated={tr['pct_escalated']:.1%}, cost_ratio={tr['effective_cost_ratio']:.2f}"
                 )
 
-            # Per-example escalation (new)
-            esc_per_example = compute_escalation_metrics_per_example(results)
-            metrics["escalation_per_example"] = esc_per_example
-            print(f"\n  Per-example escalation (selected thresholds):")
-            for tr in esc_per_example["thresholds"][::5]:
-                print(
-                    f"    threshold={tr['threshold']:.2f}: acc={tr['accuracy']:.3f}, escalated={tr['pct_escalated']:.1%}, cost_ratio={tr['effective_cost_ratio']:.2f}"
-                )
-
-            # Soft blending (new)
+            # Soft blending
             esc_blended = compute_escalation_metrics_blended(results)
             metrics["escalation_blended"] = esc_blended
             print(f"\n  Soft blending escalation (selected midpoints):")
@@ -1106,9 +975,6 @@ def main():
             print(f"\n  Reference points:")
             for ref_name, ref_acc in esc_metrics["reference"].items():
                 print(f"    {ref_name}: {ref_acc['overall']:.3f}")
-
-            esc_per_example = compute_escalation_metrics_per_example(results)
-            metrics["escalation_per_example"] = esc_per_example
 
             esc_blended = compute_escalation_metrics_blended(results)
             metrics["escalation_blended"] = esc_blended

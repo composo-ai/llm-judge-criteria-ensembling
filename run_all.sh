@@ -40,6 +40,10 @@ echo ">>> Condition 4D: Calibration (cross-category)"
 python run_calibration.py --cal-variant cross-category --sample-size "$SAMPLE_SIZE"
 
 echo ""
+echo ">>> Condition 5: Combined (criteria + calibration_low + escalation)"
+python run_combined.py --sample-size "$SAMPLE_SIZE"
+
+echo ""
 echo "============================================"
 echo "All experiments complete!"
 echo "Results in results/raw/"
