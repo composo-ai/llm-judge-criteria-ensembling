@@ -1,4 +1,4 @@
-# Practical Techniques for Improving LLM-as-Judge Accuracy on RewardBench 2
+# Criteria Injection and Ensembling Are All You Need: A Systematic Evaluation of LLM Judge Techniques on RewardBench 2
 
 **Author:** Ryan Lail<br>
 **Affiliation:** Composo AI
@@ -113,9 +113,9 @@ This design minimises API calls (each example is scored once per prompt variant)
 
 ```bibtex
 @misc{lail2026llmjudge,
-  title={Practical Techniques for Improving LLM-as-Judge Accuracy on RewardBench 2},
+  title={Criteria Injection and Ensembling Are All You Need: A Systematic Evaluation of LLM Judge Techniques on RewardBench 2},
   author={Ryan Lail},
   year={2026},
-  url={https://github.com/composo-ai/llm-judge-ablations}
+  url={https://github.com/composo-ai/rb2-judge-techniques}
 }
 ```

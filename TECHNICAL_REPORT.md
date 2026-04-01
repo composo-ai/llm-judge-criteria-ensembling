@@ -1,4 +1,4 @@
-# Practical Techniques for Improving LLM-as-Judge Accuracy on RewardBench 2
+# Criteria Injection and Ensembling Are All You Need: A Systematic Evaluation of LLM Judge Techniques on RewardBench 2
 
 **Author:** Ryan Lail<br>
 **Affiliation:** Composo AI
