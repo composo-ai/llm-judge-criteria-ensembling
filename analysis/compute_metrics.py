@@ -186,10 +186,8 @@ def bootstrap_accuracy_ci(
 # ===================================================================
 
 def compute_cost(data: list[dict]) -> dict:
-    """Compute dollar cost from token counts."""
-    mini_cost = full_cost = 0.0
+    """Compute actual dollar cost from token counts (total collection cost)."""
     mini_in = mini_out = full_in = full_out = 0
-
     for r in data:
         c = r.get("cost", {})
         if "mini_input_tokens" in c:
@@ -203,14 +201,48 @@ def compute_cost(data: list[dict]) -> dict:
     full_cost = full_in / 1e6 * GPT54_INPUT_PER_M + full_out / 1e6 * GPT54_OUTPUT_PER_M
     total = mini_cost + full_cost
     n = len(data) or 1
-
     return {
-        "total_cost": total,
-        "mini_cost": mini_cost,
-        "full_cost": full_cost,
-        "cost_per_example": total / n,
-        "n": len(data),
+        "total_cost": total, "mini_cost": mini_cost, "full_cost": full_cost,
+        "cost_per_example": total / n, "n": len(data),
     }
+
+
+def compute_deployment_cost(
+    data: list[dict],
+    models: str = "full",
+    k: int = 1,
+    collection_k: int = 8,
+) -> float:
+    """Estimate per-example deployment cost for a specific condition.
+
+    Collections gather both models at k=8, but each derived condition
+    uses only a subset of those calls. This function estimates what a
+    condition would cost if deployed independently.
+
+    Input tokens are charged once per API call (independent of n).
+    Output tokens scale linearly with k (the n parameter).
+
+    Args:
+        models: "full", "mini", or "both"
+        k: number of completions per response in the deployed condition
+        collection_k: k used during data collection (to scale output tokens)
+    """
+    n = len(data) or 1
+    cost = 0.0
+    for r in data:
+        c = r.get("cost", {})
+        if models in ("full", "both"):
+            inp = c.get("full_input_tokens", 0)
+            out = c.get("full_output_tokens", 0)
+            # Output tokens scale with k; input charged once
+            scaled_out = out * k / collection_k
+            cost += inp / 1e6 * GPT54_INPUT_PER_M + scaled_out / 1e6 * GPT54_OUTPUT_PER_M
+        if models in ("mini", "both"):
+            inp = c.get("mini_input_tokens", 0)
+            out = c.get("mini_output_tokens", 0)
+            scaled_out = out * k / collection_k
+            cost += inp / 1e6 * GPT54_MINI_INPUT_PER_M + scaled_out / 1e6 * GPT54_MINI_OUTPUT_PER_M
+    return cost / n
 
 
 # ===================================================================
@@ -661,15 +693,17 @@ def main():
     def _condition_metrics(
         name: str, data: list[dict], model: str = "full", k: int | None = None,
         use_intersection: bool = False,
+        deploy_models: str = "full", deploy_k: int = 1,
     ) -> dict:
         if use_intersection and shared_ids:
             data = [r for r in data if r["id"] in shared_ids]
         acc = compute_accuracy(data, model=model, k_subset=k)
         ci = bootstrap_accuracy_ci(data, model=model, k_subset=k)
-        cost = compute_cost(data)
+        cost_per_ex = compute_deployment_cost(data, models=deploy_models, k=deploy_k)
         return {
             "name": name, "n": acc["n"],
-            "accuracy": acc, "accuracy_ci": ci, "cost": cost,
+            "accuracy": acc, "accuracy_ci": ci,
+            "cost": {"cost_per_example": cost_per_ex},
         }
 
     # === Derive conditions ===
@@ -681,23 +715,29 @@ def main():
     # 1. From base collection
     if base:
         key, data = base
-        m = _condition_metrics("Baseline (full k=1)", data, "full", k=1)
+        m = _condition_metrics("Baseline (full k=1)", data, "full", k=1,
+                              deploy_models="full", deploy_k=1)
         all_metrics["baseline"] = m
         print(f"\n  Baseline: {m['accuracy']['overall']:.3f} "
               f"[{m['accuracy_ci']['overall']['ci_low']:.3f}, {m['accuracy_ci']['overall']['ci_high']:.3f}]"
               f"  n={m['n']}  ${m['cost']['cost_per_example']:.4f}/ex")
 
-        m = _condition_metrics("Ensemble full k=8", data, "full", k=8)
+        m = _condition_metrics("Ensemble full k=8", data, "full", k=8,
+                              deploy_models="full", deploy_k=8)
         all_metrics["ensemble_k8"] = m
         print(f"  Ensemble k=8: {m['accuracy']['overall']:.3f} "
-              f"[{m['accuracy_ci']['overall']['ci_low']:.3f}, {m['accuracy_ci']['overall']['ci_high']:.3f}]")
+              f"[{m['accuracy_ci']['overall']['ci_low']:.3f}, {m['accuracy_ci']['overall']['ci_high']:.3f}]"
+              f"  ${m['cost']['cost_per_example']:.4f}/ex")
 
-        m = _condition_metrics("Mini k=8", data, "mini", k=8)
+        m = _condition_metrics("Mini k=8", data, "mini", k=8,
+                              deploy_models="mini", deploy_k=8)
         all_metrics["mini_k8"] = m
         print(f"  Mini k=8: {m['accuracy']['overall']:.3f} "
-              f"[{m['accuracy_ci']['overall']['ci_low']:.3f}, {m['accuracy_ci']['overall']['ci_high']:.3f}]")
+              f"[{m['accuracy_ci']['overall']['ci_low']:.3f}, {m['accuracy_ci']['overall']['ci_high']:.3f}]"
+              f"  ${m['cost']['cost_per_example']:.4f}/ex")
 
-        m = _condition_metrics("Mini k=1", data, "mini", k=1)
+        m = _condition_metrics("Mini k=1", data, "mini", k=1,
+                              deploy_models="mini", deploy_k=1)
         all_metrics["mini_k1"] = m
         print(f"  Mini k=1: {m['accuracy']['overall']:.3f}")
 
@@ -745,14 +785,18 @@ def main():
     # 2. From criteria collection
     if criteria:
         key, data = criteria
-        m = _condition_metrics("Criteria (full k=1)", data, "full", k=1)
+        m = _condition_metrics("Criteria (full k=1)", data, "full", k=1,
+                              deploy_models="full", deploy_k=1)
         all_metrics["criteria"] = m
-        print(f"\n  Criteria: {m['accuracy']['overall']:.3f} "
-              f"[{m['accuracy_ci']['overall']['ci_low']:.3f}, {m['accuracy_ci']['overall']['ci_high']:.3f}]")
+        print(f"\n  Criteria k=1: {m['accuracy']['overall']:.3f} "
+              f"[{m['accuracy_ci']['overall']['ci_low']:.3f}, {m['accuracy_ci']['overall']['ci_high']:.3f}]"
+              f"  ${m['cost']['cost_per_example']:.4f}/ex")
 
-        m = _condition_metrics("Criteria (full k=8)", data, "full", k=8)
+        m = _condition_metrics("Criteria (full k=8)", data, "full", k=8,
+                              deploy_models="full", deploy_k=8)
         all_metrics["criteria_k8"] = m
-        print(f"  Criteria k=8: {m['accuracy']['overall']:.3f}")
+        print(f"  Criteria k=8: {m['accuracy']['overall']:.3f}"
+              f"  ${m['cost']['cost_per_example']:.4f}/ex")
 
     # 3. From calibration collections
     for cal_name, cal_found in [("cal_high", cal_high), ("cal_low", cal_low),
@@ -760,20 +804,26 @@ def main():
         if cal_found:
             key, data = cal_found
             label = cal_name.replace("cal_", "Calibration (") + ")"
-            m = _condition_metrics(label, data, "full", k=1)
+            # Cal cost includes the calibration scoring call (~1.5x baseline)
+            m = _condition_metrics(label, data, "full", k=1,
+                                  deploy_models="full", deploy_k=1)
             all_metrics[cal_name] = m
             print(f"\n  {label}: {m['accuracy']['overall']:.3f} "
-                  f"[{m['accuracy_ci']['overall']['ci_low']:.3f}, {m['accuracy_ci']['overall']['ci_high']:.3f}]")
+                  f"[{m['accuracy_ci']['overall']['ci_low']:.3f}, {m['accuracy_ci']['overall']['ci_high']:.3f}]"
+                  f"  ${m['cost']['cost_per_example']:.4f}/ex")
 
     # 4. From combined collection
     if combined:
         key, data = combined
-        m = _condition_metrics("Combined (full k=8)", data, "full", k=8)
+        m = _condition_metrics("Combined (full k=8)", data, "full", k=8,
+                              deploy_models="both", deploy_k=8)
         all_metrics["combined"] = m
         print(f"\n  Combined (full k=8): {m['accuracy']['overall']:.3f} "
-              f"[{m['accuracy_ci']['overall']['ci_low']:.3f}, {m['accuracy_ci']['overall']['ci_high']:.3f}]")
+              f"[{m['accuracy_ci']['overall']['ci_low']:.3f}, {m['accuracy_ci']['overall']['ci_high']:.3f}]"
+              f"  ${m['cost']['cost_per_example']:.4f}/ex")
 
-        m = _condition_metrics("Combined (full k=1)", data, "full", k=1)
+        m = _condition_metrics("Combined (full k=1)", data, "full", k=1,
+                              deploy_models="both", deploy_k=1)
         all_metrics["combined_k1"] = m
         print(f"  Combined (full k=1): {m['accuracy']['overall']:.3f}")
 

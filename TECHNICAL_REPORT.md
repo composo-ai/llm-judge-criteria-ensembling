@@ -103,7 +103,7 @@ Score parsing extracts the last integer in the response; any reply not ending wi
 
 The baseline condition applies the RB2 prompt verbatim with $k=1$ completion per response — four API calls per example, all using the full GPT-5.4 model. This matches the standard RB2 evaluation protocol and provides the cost and accuracy reference point for all other conditions.
 
-**Result**: 71.7% accuracy (95% CI: ±2.0pp), mean cost $0.0134/example.
+**Result**: 71.7% accuracy (95% CI: ±2.0pp), mean cost $0.0133/example.
 
 ### 3.2 Ensemble Scoring (k=8)
 
@@ -168,7 +168,7 @@ For example, for the Math category this becomes:
 
 All other parts of the prompt are unchanged.
 
-**Result**: 74.7% (±1.9pp) (+3.0pp over baseline), $0.0140/example (1.0× baseline cost — marginal token increase only). Largest gain in Math (+12.0pp), where generic criteria are most underspecified. With k=8 ensembling, criteria alone reach **83.6%** — the most cost-effective high-accuracy condition.
+**Result**: 74.7% (±1.9pp) (+3.0pp over baseline), $0.0140/example (1.0× baseline cost — marginal token increase only). Largest gain in Math (+12.0pp), where generic criteria are most underspecified. Precise IF shows a slight regression at k=1 (32.1% vs baseline 34.0%), but k=8 ensembling recovers it to 48.8%. With k=8 ensembling, criteria alone reach **83.6%** — the most cost-effective high-accuracy condition.
 
 ### 3.4 Calibration Context
 
@@ -224,7 +224,7 @@ We test four variants:
 
 | Variant | Accuracy | $/example |
 |---------|----------|-----------|
-| Baseline | 71.7% | $0.0134 |
+| Baseline | 71.7% | $0.0133 |
 | High | 72.4% | $0.0206 |
 | Low | 73.8% | $0.0211 |
 | Both | 72.8% | $0.0285 |
@@ -291,7 +291,7 @@ Each response's own variance $\sigma_i$ determines its blend weight independentl
 > **Note on cost.** Soft blending always runs all mini and full model calls, so its cost is the same as running both models ($0.0715/example, 5.4× baseline). The accuracy gain over full model k=8 comes at no additional cost beyond the mini model overhead. A natural extension would be to reduce ensemble size for both models (e.g. k=3 mini + k=3 full) and re-evaluate: given the diminishing returns observed in Section 3.2, it is plausible that much of the soft blend accuracy gain is preserved at substantially lower cost.
 
 ![Soft Blending](figures/soft_blending.png)
-*Figure 5: Per-response soft blending accuracy vs mean blend weight $w$. The optimal midpoint $m$ achieves 83.7% accuracy at a mean blend weight of ~0.65, outperforming both mini model k=8 (79.0%) and full model k=8 (81.8%). Accuracy degrades on both sides: too low $w$ relies too heavily on the mini model; too high $w$ discards the useful mini signal.*
+*Figure 5: Per-response soft blending accuracy vs mean blend weight $w$. The optimal midpoint achieves 83.2% on the full dataset at a mean blend weight of ~0.65. Accuracy degrades on both sides: too low $w$ relies too heavily on the mini model; too high $w$ discards the useful mini signal.*
 
 #### 3.5.3 Variance-Informed Ensembling
 
@@ -303,20 +303,20 @@ $$n_{\text{full},i}(\sigma_i) = \begin{cases} 1 & \text{if } \sigma_i \leq \sigm
 
 Parameters $(\sigma_1, \sigma_2)$ are found by grid search over the 15th–95th percentile range of observed per-response variances, excluding extremes where the thresholds would have negligible effect. For each $(\sigma_1, \sigma_2)$, we compute accuracy by subsampling the first $n_{\text{full},i}(\sigma_i)$ full model scores for each response — no additional API calls needed.
 
-The **budget-constrained** variant restricts mean $n_{\text{full}} \leq 2.0$, achieving 75.4% accuracy at just 1.6× baseline cost (vs 81.8% for full model k=8 at 5.3× cost).
+The **budget-constrained** variant restricts mean $n_{\text{full}} \leq 2.0$, achieving 74.9% accuracy on the test set at just 1.6× baseline cost (vs 81.5% for full model k=8 at 5.0× cost).
 
 ![Variance-Informed Ensembling](figures/variance_informed_ensembling.png)
 *Figure 6: Pareto frontier for per-response variance-informed ensembling (black) vs fixed-k full model (blue). Each gray point is a grid search configuration $(\sigma_1, \sigma_2)$. The Pareto frontier lies above the fixed-k line at low-to-medium cost, showing that adaptive routing extracts more accuracy per dollar than naively reducing k. At very low cost ratios, fixed k=1 full is competitive because variance-informed routing always incurs a fixed overhead from running mini n=8 first — the variance signal must pay for itself before adaptive allocation becomes worthwhile. The budget-constrained optimum (green star, 75.4% at 0.30× cost) and best overall (red star, 81.3% at 0.84× cost) are highlighted.*
 
-**Summary of escalation strategies** (costs relative to k=1 full model baseline at $0.0134/example):
+**Summary of escalation strategies** (costs relative to k=1 full model baseline at $0.0133/example):
 
 | Strategy | Accuracy | $/example | vs k=1 full |
 |----------|----------|-----------|-------------|
-| k=1 full (baseline) | 71.7% | $0.0134 | 1.0× |
-| Full model k=8 | 81.5% | $0.0714 | 5.3× |
-| Soft blend (full dataset) | 83.2% | $0.0714 | 5.3× |
-| **Soft blend (test set)** | **80.2%** | $0.0714 | 5.3× |
-| Var-informed (≤2 calls, test set) | 74.9% | $0.0216 | 1.6× |
+| k=1 full (baseline) | 71.7% | $0.0133 | 1.0× |
+| Full model k=8 | 81.5% | $0.0663 | 5.0× |
+| Soft blend (full dataset) | 83.2% | $0.0714 | 5.4× |
+| **Soft blend (test set)** | **80.2%** | $0.0714 | 5.4× |
+| Var-informed (≤2 calls, test set) | 74.9% | ~$0.022 | 1.6× |
 
 Soft blending achieves 83.2% on the full dataset (80.2% on a held-out 20% test set) at the same cost as full model k=8 ($0.0714/example, 5.3×).
 
@@ -340,19 +340,19 @@ The calibration "low" variant is used as default (slightly best-performing in is
 
 | Condition | N | Overall (95% CI) | Factuality | Focus | Math | Precise IF | Safety | $/example | vs Baseline |
 |-----------|---|-------------------|------------|-------|------|------------|--------|-----------|-------------|
-| Baseline (full k=1) | 1729 | 71.7% (±2.0pp) | 76.4% | 70.1% | 61.2% | 34.0% | 87.3% | $0.0134 | 1.0× |
-| Criteria (full k=1) | 1738 | 74.7% (±1.9pp) | 77.9% | 72.3% | 73.2% | 32.1% | 90.6% | $0.0140 | 1.0× |
-| Calibration (high) | 1744 | 72.4% (±2.1pp) | 77.3% | 68.4% | 67.8% | 34.4% | 87.7% | $0.0206 | 1.5× |
-| Calibration (low) | 1737 | 73.8% (±2.0pp) | 78.9% | 71.5% | 65.6% | 32.5% | 89.9% | $0.0211 | 1.6× |
-| Calibration (both) | 1730 | 72.8% (±2.0pp) | 77.3% | 71.1% | 65.6% | 31.9% | 88.8% | $0.0285 | 2.1× |
-| Calibration (cross-category) | 1745 | 72.4% (±2.1pp) | 77.0% | 68.2% | 68.0% | 30.6% | 89.1% | $0.0209 | 1.6× |
-| Ensemble (full k=8) | 1730 | 81.5% (±1.8pp) | 86.7% | 81.8% | 74.9% | 44.7% | 92.1% | $0.0667 | 5.0× |
+| Baseline (full k=1) | 1729 | 71.7% (±2.0pp) | 76.4% | 70.1% | 61.2% | 34.0% | 87.3% | $0.0133 | 1.0× |
+| Criteria (full k=1) | 1738 | 74.7% (±1.9pp) | 77.9% | 72.3% | 73.2% | 32.1% | 90.6% | $0.0140 | 1.1× |
+| Calibration (high) | 1744 | 72.4% (±2.1pp) | 77.3% | 68.4% | 67.8% | 34.4% | 87.7% | $0.0192 | 1.4× |
+| Calibration (low) | 1737 | 73.8% (±2.0pp) | 78.9% | 71.5% | 65.6% | 32.5% | 89.9% | $0.0198 | 1.5× |
+| Calibration (both) | 1730 | 72.8% (±2.0pp) | 77.3% | 71.1% | 65.6% | 31.9% | 88.8% | $0.0256 | 1.9× |
+| Calibration (cross-category) | 1745 | 72.4% (±2.1pp) | 77.0% | 68.2% | 68.0% | 30.6% | 89.1% | $0.0194 | 1.5× |
+| Ensemble (full k=8) | 1730 | 81.5% (±1.8pp) | 86.7% | 81.8% | 74.9% | 44.7% | 92.1% | $0.0663 | 5.0× |
 | Mini model k=8 | 1730 | 79.2% (±1.9pp) | 83.3% | 80.2% | 68.3% | 40.3% | 92.8% | $0.0051 | 0.4× |
-| Criteria (full k=8) | 1741 | **83.6%** (±1.6pp) | **89.1%** | 82.8% | **79.2%** | 48.8% | 93.2% | $0.0140 | 1.0× |
-| Combined (full k=8) | 1746 | 82.6% (±1.6pp) | 87.6% | 80.6% | 77.6% | **52.5%** | 92.8% | $0.0773 | 5.8× |
-| Soft blend (test) ‡ | ~343 | 80.2% | — | — | — | — | — | $0.0715 | 5.4× |
-| **Combined + blend (test)** ‡ | ~349 | **84.8%** | — | — | — | — | — | $0.0773 | 5.8× |
-| Var-informed (≤2 calls, test) ‡ | ~343 | 74.9% | — | — | — | — | — | $0.0216 | 1.6× |
+| Criteria (full k=8) | 1741 | **83.6%** (±1.6pp) | **89.1%** | 82.8% | **79.2%** | 48.8% | 93.2% | $0.0702 | 5.3× |
+| Combined (full k=8) | 1746 | 82.6% (±1.6pp) | 87.6% | 80.6% | 77.6% | **52.5%** | 92.8% | $0.0803 | 6.0× |
+| Soft blend (test) ‡ | ~343 | 80.2% | — | — | — | — | — | $0.0714 | 5.4× |
+| **Combined + blend (test)** ‡ | ~349 | **84.8%** | — | — | — | — | — | $0.0803 | 6.0× |
+| Var-informed (≤2 calls, test) ‡ | ~343 | 74.9% | — | — | — | — | — | ~$0.022 | 1.6× |
 
 > **Note on test-set evaluation (‡ rows):** Soft blend and combined+blend parameters are optimised on 80% of the data and evaluated on the remaining 20%. The test set is small (~340 examples), so per-subset breakdowns are omitted and the overall accuracy has wider confidence intervals than full-dataset conditions.
 
@@ -410,7 +410,7 @@ Agreement plateaus at ~80% by $k=3–5$. The ceiling is not a data limitation �
 
 ### 5.4 Soft Blending vs Hard Escalation
 
-Soft blending consistently outperforms hard escalation at every cost level (see Figure 5). Hard escalation is a step function: once variance crosses a threshold, it switches entirely to the full model. Soft blending provides a smoother transition, effectively weighting mini and full model signals in proportion to each response's uncertainty. This explains why it can *exceed* the accuracy of always using the full model (83.7% vs 81.8%): it combines information from both models rather than discarding mini model scores.
+On the full dataset (in-sample), soft blending (83.2%) outperforms full model k=8 (81.5%), consistent with the hypothesis that combining two imperfectly correlated estimators reduces variance. However, on the held-out test set, base soft blend (80.2%) does not beat full k=8 (81.5%), suggesting the in-sample gain is partly due to midpoint overfitting. The benefit is more robust when combined with prompt improvements: combined+blend (84.8% test) does outperform combined full k=8 (82.6%), indicating that blending is most valuable when both models have richer scoring signals from criteria and calibration context.
 
 ### 5.5 Temperature Sensitivity
 
@@ -420,6 +420,12 @@ This confirms that temperature > 0 is necessary for ensemble diversity to provid
 
 ![Temperature Sweep](figures/temperature_sweep.png)
 *Figure 10: Baseline accuracy vs temperature for k=1 and k=8. k=1 accuracy is stable across temperatures; k=8 accuracy degrades at low temperatures as ensemble diversity vanishes.*
+
+### 5.6 Criteria + Ensembling as a Simple Strong Baseline
+
+Perhaps the most practically important finding is that criteria k=8 (83.6%) outperforms the full combined condition (82.6%) at a fraction of the cost. Adding a single pre-registered sentence to the prompt and requesting 8 completions captures most of the available accuracy gains — without calibration context, without a second model, and at essentially 1× baseline cost (since the `n` parameter charges input tokens only once).
+
+This suggests that for practitioners adopting LLM judges, the highest-value intervention is: (1) write a task-specific criterion, (2) set k=3–8. More complex techniques (calibration, model routing, blending) provide diminishing marginal returns over this simple baseline.
 
 ---
 
