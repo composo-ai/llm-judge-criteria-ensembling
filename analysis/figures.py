@@ -59,13 +59,11 @@ def _load_metrics():
         return json.load(f)
 
 
-def _find_collection(*prefixes: str) -> list[dict] | None:
-    """Find a collection by trying multiple filename prefixes (new + legacy)."""
-    for prefix in prefixes:
-        for f in sorted(RAW_DIR.glob(f"{prefix}*.jsonl")):
-            data = load_collection(f)
-            if data:
-                return data
+def _find_collection(prefix: str) -> list[dict] | None:
+    for f in sorted(RAW_DIR.glob(f"{prefix}*.jsonl")):
+        data = load_collection(f)
+        if data:
+            return data
     return None
 
 
@@ -242,15 +240,14 @@ def plot_diminishing_returns(metrics):
 # ===================================================================
 
 def plot_variance_error_signal(metrics):
-    data = _find_collection("base_both", "escalation_mini")
+    data = _find_collection("base_both")
     if not data:
         print("  Skipping variance figure: no base collection")
         return
 
     correct_stds, incorrect_stds = [], []
     for r in data:
-        scores_key = "full_scores" if "full_scores" in r else "all_scores"
-        scores_per_resp = r.get(scores_key)
+        scores_per_resp = r.get("full_scores")
         if not scores_per_resp:
             continue
         stds, means = [], []
@@ -287,7 +284,7 @@ def plot_variance_error_signal(metrics):
 # ===================================================================
 
 def plot_variance_correlation(metrics):
-    data = _find_collection("base_both", "escalation_mini")
+    data = _find_collection("base_both")
     if not data:
         print("  Skipping variance correlation: no data")
         return
@@ -329,7 +326,7 @@ def plot_variance_correlation(metrics):
 # ===================================================================
 
 def plot_soft_blending(metrics):
-    data = _find_collection("base_both", "escalation_mini")
+    data = _find_collection("base_both")
     if not data or "mini_scores" not in data[0]:
         print("  Skipping soft blending: no dual-model data")
         return

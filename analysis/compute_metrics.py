@@ -97,10 +97,7 @@ def compute_accuracy(
     for r in data:
         scores_per_resp = r.get(score_key)
         if scores_per_resp is None:
-            # Fallback for legacy format
-            scores_per_resp = r.get("all_scores")
-            if scores_per_resp is None:
-                continue
+            continue
         subset = r["subset"]
         means = []
         for scores in scores_per_resp:
@@ -201,10 +198,6 @@ def compute_cost(data: list[dict]) -> dict:
         if "full_input_tokens" in c:
             full_in += c["full_input_tokens"]
             full_out += c["full_output_tokens"]
-        # Legacy single-model format
-        if "input_tokens" in c:
-            full_in += c["input_tokens"]
-            full_out += c["output_tokens"]
 
     mini_cost = mini_in / 1e6 * GPT54_MINI_INPUT_PER_M + mini_out / 1e6 * GPT54_MINI_OUTPUT_PER_M
     full_cost = full_in / 1e6 * GPT54_INPUT_PER_M + full_out / 1e6 * GPT54_OUTPUT_PER_M
@@ -231,7 +224,7 @@ def compute_variance_metrics(data: list[dict], model: str = "full") -> dict:
     by_subset = defaultdict(lambda: {"stds_correct": [], "stds_incorrect": [], "all_stds": []})
 
     for r in data:
-        scores_per_resp = r.get(score_key, r.get("all_scores"))
+        scores_per_resp = r.get(score_key)
         if scores_per_resp is None:
             continue
 
@@ -256,7 +249,7 @@ def compute_variance_metrics(data: list[dict], model: str = "full") -> dict:
     corr = None
     labels, variances = [], []
     for r in data:
-        scores_per_resp = r.get(score_key, r.get("all_scores"))
+        scores_per_resp = r.get(score_key)
         if scores_per_resp is None:
             continue
         stds, means = [], []
@@ -635,25 +628,20 @@ def main():
         print("No collection files found")
         sys.exit(1)
 
-    # --- Find collections (supports both new and legacy filenames) ---
-    def _find(*prefixes: str) -> tuple[str, list[dict]] | None:
-        for prefix in prefixes:
-            for key, data in collections.items():
-                if key.startswith(prefix):
-                    return key, data
+    # --- Find collections ---
+    def _find(prefix: str) -> tuple[str, list[dict]] | None:
+        for key, data in collections.items():
+            if key.startswith(prefix):
+                return key, data
         return None
 
-    # base_both_k8 (new) OR escalation_mini_n8_full_n8 (legacy dual-model base prompt)
-    base = _find("base_both", "escalation_mini")
-    # criteria_both_k8 (new) OR criteria_gpt (legacy single-model)
-    criteria = _find("criteria_both", "criteria_gpt")
-    # cal-low_both_k8 (new) OR calibration_low_gpt (legacy)
-    cal_low = _find("cal-low_both", "calibration_low")
-    cal_high = _find("cal-high_both", "calibration_high")
-    cal_both = _find("cal-both_both", "calibration_both")
-    cal_cross = _find("cal-cross_both", "calibration_cross")
-    # combined_both_k8 (new) OR combined_cal_low (legacy)
-    combined = _find("combined_both", "combined_cal")
+    base = _find("base_both")
+    criteria = _find("criteria_both")
+    cal_low = _find("cal-low_both")
+    cal_high = _find("cal-high_both")
+    cal_both = _find("cal-both_both")
+    cal_cross = _find("cal-cross_both")
+    combined = _find("combined_both")
 
     # Temperature sweep files (new format only)
     temp_files = {}
@@ -754,23 +742,6 @@ def main():
             conv = compute_ensemble_convergence(data)
             all_metrics["convergence"] = conv
 
-    # Also derive from legacy ensemble file if base is not dual-model
-    ensemble_legacy = _find("ensemble_k8")
-    if ensemble_legacy and (not base or "mini_scores" not in base[1][0]):
-        key, data = ensemble_legacy
-        m = _condition_metrics("Ensemble full k=8 (legacy)", data, "full", k=8)
-        if "ensemble_k8" not in all_metrics:
-            all_metrics["ensemble_k8"] = m
-            print(f"  Ensemble k=8 (legacy): {m['accuracy']['overall']:.3f}")
-
-    # Also derive baseline from legacy file if needed
-    baseline_legacy = _find("baseline_gpt")
-    if baseline_legacy and "baseline" not in all_metrics:
-        key, data = baseline_legacy
-        m = _condition_metrics("Baseline (legacy)", data, "full", k=1)
-        all_metrics["baseline"] = m
-        print(f"  Baseline (legacy): {m['accuracy']['overall']:.3f}")
-
     # 2. From criteria collection
     if criteria:
         key, data = criteria
@@ -779,11 +750,9 @@ def main():
         print(f"\n  Criteria: {m['accuracy']['overall']:.3f} "
               f"[{m['accuracy_ci']['overall']['ci_low']:.3f}, {m['accuracy_ci']['overall']['ci_high']:.3f}]")
 
-        # Only compute k=8 if the data actually has k>1 scores
-        if data[0].get("k", 1) > 1 or (data[0].get("full_scores") and len(data[0]["full_scores"][0]) > 1):
-            m = _condition_metrics("Criteria (full k=8)", data, "full", k=8)
-            all_metrics["criteria_k8"] = m
-            print(f"  Criteria k=8: {m['accuracy']['overall']:.3f}")
+        m = _condition_metrics("Criteria (full k=8)", data, "full", k=8)
+        all_metrics["criteria_k8"] = m
+        print(f"  Criteria k=8: {m['accuracy']['overall']:.3f}")
 
     # 3. From calibration collections
     for cal_name, cal_found in [("cal_high", cal_high), ("cal_low", cal_low),

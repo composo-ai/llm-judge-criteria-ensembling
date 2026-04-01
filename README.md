@@ -61,14 +61,14 @@ All accuracy deltas are reported in percentage points (pp). Conditions marked wi
 
 | Condition | N | Overall (95% CI) | $/example | vs Baseline |
 |-----------|---|------------------|-----------|-------------|
-| Baseline (full k=1) | 1753 | 72.1% (±2.1pp) | $0.0134 | 1.0× |
-| Criteria (full k=1) | 1747 | 75.3% (±2.0pp) | $0.0140 | 1.0× |
-| Calibration low (full k=1) | 1545 | 74.2% (±2.2pp) | $0.0211 | 1.6× |
-| Ensemble (full k=8) † | 1705 | 81.8% (±1.7pp) | $0.0667 | 5.0× |
-| Mini model k=8 † | 1706 | 79.0% (±1.9pp) | $0.0051 | 0.4× |
-| Combined (full k=8) | 1691 | 83.0% (±1.8pp) | $0.0773 | 5.8× |
-| Soft blend (test set) ‡ | ~343 | 82.8% | $0.0715 | 5.4× |
-| **Combined + blend (test set)** ‡ | ~340 | **87.0%** | $0.0773 | 5.8× |
+| Baseline (full k=1) | 1729 | 71.7% (±2.0pp) | $0.0134 | 1.0× |
+| Criteria (full k=1) | 1738 | 74.7% (±1.9pp) | $0.0140 | 1.0× |
+| Calibration low (full k=1) | 1737 | 73.8% (±2.0pp) | $0.0211 | 1.6× |
+| Ensemble (full k=8) | 1730 | 81.5% (±1.8pp) | $0.0667 | 5.0× |
+| Mini model k=8 | 1730 | 79.2% (±1.9pp) | $0.0051 | 0.4× |
+| **Criteria (full k=8)** | 1741 | **83.6%** (±1.6pp) | $0.0140 | 1.0× |
+| Combined (full k=8) | 1746 | 82.6% (±1.6pp) | $0.0773 | 5.8× |
+| Combined + blend (test) ‡ | ~349 | **84.8%** | $0.0773 | 5.8× |
 
 > **‡** Blend parameters optimised on 80% train split, accuracy reported on held-out 20% test set.
 
