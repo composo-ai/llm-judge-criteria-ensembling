@@ -795,7 +795,13 @@ def main():
         m = _condition_metrics("Criteria (full k=8)", data, "full", k=8,
                               deploy_models="full", deploy_k=8)
         all_metrics["criteria_k8"] = m
-        print(f"  Criteria k=8: {m['accuracy']['overall']:.3f}"
+        print(f"  Criteria k=8 (full): {m['accuracy']['overall']:.3f}"
+              f"  ${m['cost']['cost_per_example']:.4f}/ex")
+
+        m = _condition_metrics("Criteria (mini k=8)", data, "mini", k=8,
+                              deploy_models="mini", deploy_k=8)
+        all_metrics["criteria_mini_k8"] = m
+        print(f"  Criteria k=8 (mini): {m['accuracy']['overall']:.3f}"
               f"  ${m['cost']['cost_per_example']:.4f}/ex")
 
     # 3. From calibration collections
@@ -808,8 +814,14 @@ def main():
             m = _condition_metrics(label, data, "full", k=1,
                                   deploy_models="full", deploy_k=1)
             all_metrics[cal_name] = m
-            print(f"\n  {label}: {m['accuracy']['overall']:.3f} "
+            print(f"\n  {label} k=1: {m['accuracy']['overall']:.3f} "
                   f"[{m['accuracy_ci']['overall']['ci_low']:.3f}, {m['accuracy_ci']['overall']['ci_high']:.3f}]"
+                  f"  ${m['cost']['cost_per_example']:.4f}/ex")
+
+            m = _condition_metrics(label + " k=8", data, "full", k=8,
+                                  deploy_models="full", deploy_k=8)
+            all_metrics[cal_name + "_k8"] = m
+            print(f"  {label} k=8: {m['accuracy']['overall']:.3f}"
                   f"  ${m['cost']['cost_per_example']:.4f}/ex")
 
     # 4. From combined collection

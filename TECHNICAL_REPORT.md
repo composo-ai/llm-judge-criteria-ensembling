@@ -222,15 +222,15 @@ We test four variants:
 
 **Result**: All variants improve over baseline (+1–2pp). The "low" variant (showing a bad example) slightly outperforms "high" (73.8% vs 72.4%), possibly because the judge finds it easier to distinguish the target from a known-bad anchor. Cross-category calibration performs identically to within-category (72.4%), suggesting the benefit is context length and anchoring rather than category-specific knowledge.
 
-| Variant | Accuracy | $/example |
-|---------|----------|-----------|
-| Baseline | 71.7% | $0.0133 |
-| High | 72.4% | $0.0206 |
-| Low | 73.8% | $0.0211 |
-| Both | 72.8% | $0.0285 |
-| Cross-category | 72.4% | $0.0209 |
+| Variant | k=1 | k=8 |
+|---------|-----|-----|
+| Baseline (no calibration) | 71.7% | 81.5% |
+| High | 72.4% | 81.0% |
+| Low | 73.8% | 81.7% |
+| Both | 72.8% | 81.5% |
+| Cross-category | 72.4% | 81.7% |
 
-The +2pp gain from calibration is modest and comes at 1.5× baseline cost. As we show in Section 5.6, criteria k=8 achieves +11.9pp at similar cost, making calibration a poor investment when ensembling is available.
+At k=1, calibration provides a modest +1–2pp gain. **At k=8, calibration adds nothing** — all variants are within ±0.2pp of the vanilla ensemble (81.5%). The k=8 ensemble already reduces scoring noise sufficiently that the anchoring benefit of calibration is redundant. Compare with criteria, which provides +2.1pp even at k=8 (Section 5.1).
 
 ### 3.5 Adaptive Escalation with Dual-Model Scoring
 
@@ -341,15 +341,17 @@ The calibration "low" variant is used as default (slightly best-performing in is
 | Ensemble (full k=8) | 1730 | 81.5% (±1.8pp) | 86.7% | 81.8% | 74.9% | 44.7% | 92.1% | $0.0663 | 5.0× |
 | **Criteria (full k=8)** | 1741 | **83.6%** (±1.6pp) | **89.1%** | **82.8%** | **79.2%** | 48.8% | **93.2%** | $0.0702 | 5.3× |
 | Mini model k=8 | 1730 | 79.2% (±1.9pp) | 83.3% | 80.2% | 68.3% | 40.3% | 92.8% | $0.0051 | 0.4× |
+| Criteria (mini k=8) | 1741 | 81.5% (±1.7pp) | — | — | — | — | — | $0.0054 | 0.4× |
 
 **Investigated techniques (did not improve on criteria k=8):**
 
 | Condition | N | Overall (95% CI) | Factuality | Focus | Math | Precise IF | Safety | $/example | vs Baseline |
 |-----------|---|-------------------|------------|-------|------|------------|--------|-----------|-------------|
-| Calibration (low) | 1737 | 73.8% (±2.0pp) | 78.9% | 71.5% | 65.6% | 32.5% | 89.9% | $0.0198 | 1.5× |
-| Calibration (high) | 1744 | 72.4% (±2.1pp) | 77.3% | 68.4% | 67.8% | 34.4% | 87.7% | $0.0192 | 1.4× |
-| Calibration (both) | 1730 | 72.8% (±2.0pp) | 77.3% | 71.1% | 65.6% | 31.9% | 88.8% | $0.0256 | 1.9× |
-| Calibration (cross-category) | 1745 | 72.4% (±2.1pp) | 77.0% | 68.2% | 68.0% | 30.6% | 89.1% | $0.0194 | 1.5× |
+| Calibration low (k=1) | 1737 | 73.8% (±2.0pp) | 78.9% | 71.5% | 65.6% | 32.5% | 89.9% | $0.0198 | 1.5× |
+| Calibration low (k=8) | 1737 | 81.7% | — | — | — | — | — | $0.0663 | 5.0× |
+| Calibration high (k=1) | 1744 | 72.4% (±2.1pp) | 77.3% | 68.4% | 67.8% | 34.4% | 87.7% | $0.0192 | 1.4× |
+| Calibration both (k=1) | 1730 | 72.8% (±2.0pp) | 77.3% | 71.1% | 65.6% | 31.9% | 88.8% | $0.0256 | 1.9× |
+| Calibration cross (k=1) | 1745 | 72.4% (±2.1pp) | 77.0% | 68.2% | 68.0% | 30.6% | 89.1% | $0.0194 | 1.5× |
 | Combined (full k=8) | 1746 | 82.6% (±1.6pp) | 87.6% | 80.6% | 77.6% | **52.5%** | 92.8% | $0.0803 | 6.0× |
 | Soft blend (test) ‡ | ~343 | 80.2% | — | — | — | — | — | $0.0714 | 5.4× |
 | Combined + blend (test) ‡ | ~349 | 84.8% | — | — | — | — | — | $0.0803 | 6.0× |
@@ -371,17 +373,18 @@ The calibration "low" variant is used as default (slightly best-performing in is
 
 ### 5.1 What Works and What Doesn't
 
-The most important finding is what *doesn't* stack. Criteria k=8 (83.6%) is the best condition in the study. Adding calibration context and a second model (the combined condition at 82.6%) actually reduces accuracy by 1.0pp while increasing cost from 5.3× to 6.0× baseline:
+The most important finding is what *doesn't* stack. The full prompt × model × k grid (all derived from existing collections) is:
 
-| Technique | Accuracy | vs Baseline | $/example |
-|-----------|----------|-------------|-----------|
-| Baseline | 71.7% | — | $0.0133 |
-| + Criteria (k=1) | 74.7% | +3.0pp | $0.0140 |
-| + Ensemble (k=8) | 81.5% | +9.8pp | $0.0663 |
-| **+ Criteria + ensemble (k=8)** | **83.6%** | **+11.9pp** | **$0.0702** |
-| + Calibration + dual-model (combined) | 82.6% | +10.9pp | $0.0803 |
+| Prompt variant (k=8) | Full model | Mini model |
+|----------------------|-----------|-----------|
+| Base (ensemble only) | 81.5% | 79.2% |
+| Calibration (low) | 81.7% | 79.0% |
+| **Criteria** | **83.6%** | **81.5%** |
+| Criteria + calibration (combined) | 82.6% | 79.2% |
 
-Criteria and ensembling are the core techniques. Each contributes meaningfully: criteria adds +3.0pp at k=1, and the criteria+ensemble interaction is super-additive (+11.9pp vs +3.0pp + 9.8pp = +12.8pp expected). Calibration, model routing, and soft blending do not improve on this simpler baseline and are not recommended for deployment.
+Criteria is the only prompt technique that helps at k=8, adding +2.1pp for the full model and +2.3pp for mini. Calibration is a no-op at k=8 (+0.2pp, within noise). **Adding calibration to criteria actually hurts**: the combined condition (82.6%) is 1.0pp below criteria alone (83.6%). This pattern holds for both models.
+
+A notable finding: **mini + criteria k=8 (81.5%) matches full model base ensemble (81.5%)** at roughly one-tenth the cost. For cost-constrained deployments, criteria + mini ensembling may be the optimal operating point.
 
 ### 5.2 Precise IF as a Hard Category
 
