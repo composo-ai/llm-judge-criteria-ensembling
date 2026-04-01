@@ -42,35 +42,37 @@ All collections write incrementally and support **resume** — restart after int
 ## Analysis
 
 ```bash
-# Derive all experimental conditions offline and compute metrics
-python analysis/compute_metrics.py
-
-# Generate all figures
-python analysis/figures.py
+python -m analysis.compute_metrics
+python -m analysis.figures
 ```
-
-The analysis pipeline:
-- Derives baseline (k=1), ensemble (k=1..8), and escalation conditions by subsampling collected k=8 data
-- Applies 80/20 stratified train/test split for parameter-optimised conditions (soft blend, variance-informed)
-- Reports 95% bootstrap confidence intervals for all accuracy numbers
-- Computes metrics on the intersection of examples across conditions for fair comparison
 
 ## Results
 
-All accuracy deltas are reported in percentage points (pp). Conditions marked with a dagger (†) are derived offline from collected data. Confidence intervals are 95% bootstrap.
+All accuracy deltas in percentage points (pp). 95% bootstrap CIs shown. Conditions marked ‡ report test-set accuracy (20% held-out).
+
+**Recommended techniques:**
 
 | Condition | N | Overall (95% CI) | $/example | vs Baseline |
 |-----------|---|------------------|-----------|-------------|
 | Baseline (full k=1) | 1729 | 71.7% (±2.0pp) | $0.0133 | 1.0× |
 | Criteria (full k=1) | 1738 | 74.7% (±1.9pp) | $0.0140 | 1.1× |
-| Calibration low (full k=1) | 1737 | 73.8% (±2.0pp) | $0.0198 | 1.5× |
 | Ensemble (full k=8) | 1730 | 81.5% (±1.8pp) | $0.0663 | 5.0× |
-| Mini model k=8 | 1730 | 79.2% (±1.9pp) | $0.0051 | 0.4× |
 | **Criteria (full k=8)** | 1741 | **83.6%** (±1.6pp) | $0.0702 | 5.3× |
-| Combined (full k=8) | 1746 | 82.6% (±1.6pp) | $0.0803 | 6.0× |
-| Combined + blend (test) ‡ | ~349 | **84.8%** | $0.0803 | 6.0× |
+| Mini model k=8 | 1730 | 79.2% (±1.9pp) | $0.0051 | 0.4× |
+| Criteria (mini k=8) | 1741 | 81.5% (±1.7pp) | $0.0053 | 0.4× |
 
-> **‡** Blend parameters optimised on 80% train split, accuracy reported on held-out 20% test set.
+**Investigated techniques (did not improve on criteria k=8):**
+
+| Condition | N | Overall (95% CI) | $/example | vs Baseline |
+|-----------|---|------------------|-----------|-------------|
+| Calibration low (k=1) | 1737 | 73.8% (±2.0pp) | $0.0198 | 1.5× |
+| Calibration low (k=8) | 1737 | 81.7% | $0.0663 | 5.0× |
+| Combined (full k=8) | 1746 | 82.6% (±1.6pp) | $0.0803 | 6.0× |
+| Combined + blend (test) ‡ | ~349 | 84.8% | $0.0803 | 6.0× |
+
+> **‡** Blend parameters optimised on 80% train split, accuracy on held-out 20%. See report for caveats.
+
+![Hero Accuracy](figures/hero_accuracy.png)
 
 ## File Structure
 
@@ -94,14 +96,11 @@ Each `collect.py` invocation collects k=8 scores from both mini and full models 
 
 - **Baseline** = base collection, full model, subsample k=1
 - **Ensemble k=N** = base collection, full model, subsample k=N
-- **Mini only** = base collection, mini model
-- **Escalation** = base collection, mini+full, variance-based routing
-- **Soft blend** = base collection, mini+full, sigmoid weighting (params optimised on train split)
 - **Criteria** = criteria collection, full model
 - **Calibration** = cal-* collection, full model
 - **Combined** = combined collection, all techniques
 
-This design minimises API calls (each example is scored once per prompt variant) while maximising the number of conditions that can be analysed.
+This design minimises API calls while maximising the number of conditions that can be analysed.
 
 ## Infrastructure Notes
 
