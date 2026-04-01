@@ -1,51 +1,60 @@
 #!/bin/bash
 set -e
 
-SAMPLE_SIZE=${1:-50}
-
 echo "============================================"
-echo "Running all RB2 experiments (sample_size=$SAMPLE_SIZE)"
+echo "RB2 Judge Experiments — Data Collection"
 echo "============================================"
 
-echo ""
-echo ">>> Condition 0: Baseline"
-python run_baselines.py --sample-size "$SAMPLE_SIZE"
+# -----------------------------------------------
+# Core collections (mini + full, k=8, temp=1.0)
+# Each collection enables many offline experiments
+# -----------------------------------------------
 
 echo ""
-echo ">>> Condition 1: Ensemble (k=8)"
-python run_ensemble.py --sample-size "$SAMPLE_SIZE"
+echo ">>> Collection 1/7: Base prompt (vanilla RB2)"
+python collect.py --prompt base --models both --k 8
 
 echo ""
-echo ">>> Condition 2: Adaptive Escalation (mini → full)"
-python run_escalation.py --sample-size "$SAMPLE_SIZE"
+echo ">>> Collection 2/7: Criteria prompt"
+python collect.py --prompt criteria --models both --k 8
 
 echo ""
-echo ">>> Condition 3: Task-Specific Criteria"
-python run_criteria.py --sample-size "$SAMPLE_SIZE"
+echo ">>> Collection 3/7: Calibration (low)"
+python collect.py --prompt cal-low --models both --k 8
 
 echo ""
-echo ">>> Condition 4A: Calibration (high)"
-python run_calibration.py --cal-variant high --sample-size "$SAMPLE_SIZE"
+echo ">>> Collection 4/7: Calibration (high)"
+python collect.py --prompt cal-high --models both --k 8
 
 echo ""
-echo ">>> Condition 4B: Calibration (low)"
-python run_calibration.py --cal-variant low --sample-size "$SAMPLE_SIZE"
+echo ">>> Collection 5/7: Calibration (both)"
+python collect.py --prompt cal-both --models both --k 8
 
 echo ""
-echo ">>> Condition 4C: Calibration (both)"
-python run_calibration.py --cal-variant both --sample-size "$SAMPLE_SIZE"
+echo ">>> Collection 6/7: Calibration (cross-category)"
+python collect.py --prompt cal-cross --models both --k 8
 
 echo ""
-echo ">>> Condition 4D: Calibration (cross-category)"
-python run_calibration.py --cal-variant cross-category --sample-size "$SAMPLE_SIZE"
+echo ">>> Collection 7/7: Combined (criteria + cal-low)"
+python collect.py --prompt combined --models both --k 8
+
+# -----------------------------------------------
+# Temperature sweep (base prompt, full model, k=8)
+# Subsampled to k=1 in analysis
+# -----------------------------------------------
 
 echo ""
-echo ">>> Condition 5: Combined (criteria + calibration_low + escalation)"
-python run_combined.py --sample-size "$SAMPLE_SIZE"
+echo ">>> Temperature sweep"
+for TEMP in 0.0 0.3 0.7; do
+    echo "  temp=$TEMP"
+    python collect.py --prompt base --models full --k 8 --temperature "$TEMP"
+done
 
 echo ""
 echo "============================================"
-echo "All experiments complete!"
+echo "All collections complete!"
 echo "Results in results/raw/"
 ls -lh results/raw/*.jsonl
+echo ""
+echo "Next: python analysis/compute_metrics.py && python analysis/figures.py"
 echo "============================================"

@@ -1,13 +1,13 @@
-# Practical Techniques for Improving LLM-as-Judge Accuracy on RewardBench 2
+# Criteria Injection and Ensembling Are All You Need: A Systematic Evaluation of LLM Judge Techniques on RewardBench 2
 
 **Author:** Ryan Lail<br>
 **Affiliation:** Composo AI
 
-Ablation study testing practical techniques to improve LLM-as-judge accuracy on [RewardBench 2](https://huggingface.co/datasets/allenai/reward-bench-2) (ratings mode). See [TECHNICAL_REPORT.md](TECHNICAL_REPORT.md) for full methodology, mathematical derivations, and analysis.
+Systematic evaluation of five candidate techniques for improving LLM-as-judge accuracy on [RewardBench 2](https://huggingface.co/datasets/allenai/reward-bench-2) (ratings mode). **Key finding:** a one-sentence task-specific criterion with k=8 ensembling reaches 83.6% — the best result at its cost level. Three additional techniques (calibration, model routing, soft blending) did not reliably improve on this. See [TECHNICAL_REPORT.md](TECHNICAL_REPORT.md) for full methodology and analysis.
 
 ## Setup
 
-**Requirements**: Python 3.13, Azure OpenAI access.
+**Requirements**: Python 3.13, Azure OpenAI access (GPT-5.4 and GPT-5.4 mini deployments).
 
 ```bash
 python3.13 -m venv .venv
@@ -17,77 +17,105 @@ cp .env.example .env
 # Fill in your Azure OpenAI credentials in .env
 ```
 
-> **Note:** `run_all.sh` calls bare `python`, so make sure the venv is activated (or prepend the venv to your PATH: `PATH=".venv/bin:$PATH" bash run_all.sh`).
+## Data Collection
 
-The baseline, ensemble, criteria, and calibration conditions need only the `AZURE_OPENAI_*` vars (full model). The escalation and combined conditions additionally require `AZURE_OPENAI_MINI_*` (a separate mini deployment).
-
-## Quick Start
+All experiments use a unified collection script. Each collection gathers k=8 scores from both mini and full models, enabling offline derivation of many experimental conditions from a single API run.
 
 ```bash
-# Run all experiments (resume-safe, ~2-3 hours total)
-python run_baselines.py
-python run_ensemble.py
-python run_criteria.py
-python run_calibration.py
-python run_escalation.py
-python run_combined.py
+# Core collections (each runs the full RB2 dataset with both models, k=8)
+python collect.py --prompt base --models both --k 8       # Vanilla RB2 prompt
+python collect.py --prompt criteria --models both --k 8   # + task-specific criteria
+python collect.py --prompt cal-low --models both --k 8    # + calibration (low)
+python collect.py --prompt combined --models both --k 8   # + criteria + calibration
 
-# Compute metrics and generate figures
+# Temperature sweep (base prompt, full model only)
+python collect.py --prompt base --models full --k 8 --temperature 0.0
+python collect.py --prompt base --models full --k 8 --temperature 0.3
+python collect.py --prompt base --models full --k 8 --temperature 0.7
+
+# Or run everything:
+bash run_all.sh
+```
+
+All collections write incrementally and support **resume** — restart after interruption and completed examples are skipped.
+
+## Analysis
+
+```bash
+# Derive all experimental conditions offline and compute metrics
 python analysis/compute_metrics.py
+
+# Generate all figures
 python analysis/figures.py
 ```
 
+The analysis pipeline:
+- Derives baseline (k=1), ensemble (k=1..8), and escalation conditions by subsampling collected k=8 data
+- Applies 80/20 stratified train/test split for parameter-optimised conditions (soft blend, variance-informed)
+- Reports 95% bootstrap confidence intervals for all accuracy numbers
+- Computes metrics on the intersection of examples across conditions for fair comparison
+
 ## Results
 
-| Condition | N | Overall | Factuality | Focus | Math | Precise IF | Safety | $/example | vs Baseline |
-|-----------|---|---------|------------|-------|------|------------|--------|-----------|-------------|
-| Baseline | 1753 | 72.1% | 77.3% | 71.3% | 64.5% | 26.4% | 87.1% | $0.0134 | 1.0× |
-| Criteria | 1747 | 75.3% | 79.8% | 73.5% | 70.5% | 34.4% | 89.7% | $0.0140 | 1.0× |
-| Calibration (high) | 1614 | 73.0% | 78.4% | 67.7% | 67.8% | 36.9% | 88.2% | $0.0206 | 1.5× |
-| Calibration (low) | 1545 | 74.2% | 77.9% | 68.3% | 69.9% | 33.1% | 91.2% | $0.0211 | 1.6× |
-| Calibration (both) | 1516 | 74.1% | 77.7% | 71.2% | 67.1% | 32.7% | 88.6% | $0.0285 | 2.1× |
-| Calibration (cross-category) | 1614 | 73.0% | 79.1% | 70.8% | 66.3% | 32.9% | 87.4% | $0.0209 | 1.6× |
-| Ensemble k=8 | 1754 | 80.8% | 86.1% | 80.6% | 76.5% | 40.9% | 91.6% | $0.0667 | 5.0× |
-| Mini model k=8 † | 1706 | 79.0% | 83.4% | 79.6% | 68.4% | 39.3% | 91.6% | $0.0051 | 0.4× |
-| Soft blend (best) † | 1721 | 83.7% | **89.1%** | 83.3% | 78.0% | 50.7% | 92.0% | $0.0715 | 5.4× |
-| Var-informed (≤2 calls) † | 1702 | 75.4% | 79.6% | 73.0% | 67.1% | 38.0% | 90.5% | $0.0216 | 1.6× |
-| Combined | 1698 | 83.0% | 86.9% | 82.1% | 76.5% | 50.7% | 93.8% | $0.0773 | 5.8× |
-| **Combined + soft blend** † | 1698 | **84.9%** | 88.2% | **85.3%** | **79.4%** | **51.3%** | **94.8%** | $0.0773 | 5.8× |
+All accuracy deltas are reported in percentage points (pp). Conditions marked with a dagger (†) are derived offline from collected data. Confidence intervals are 95% bootstrap.
+
+| Condition | N | Overall (95% CI) | $/example | vs Baseline |
+|-----------|---|------------------|-----------|-------------|
+| Baseline (full k=1) | 1729 | 71.7% (±2.0pp) | $0.0133 | 1.0× |
+| Criteria (full k=1) | 1738 | 74.7% (±1.9pp) | $0.0140 | 1.1× |
+| Calibration low (full k=1) | 1737 | 73.8% (±2.0pp) | $0.0198 | 1.5× |
+| Ensemble (full k=8) | 1730 | 81.5% (±1.8pp) | $0.0663 | 5.0× |
+| Mini model k=8 | 1730 | 79.2% (±1.9pp) | $0.0051 | 0.4× |
+| **Criteria (full k=8)** | 1741 | **83.6%** (±1.6pp) | $0.0702 | 5.3× |
+| Combined (full k=8) | 1746 | 82.6% (±1.6pp) | $0.0803 | 6.0× |
+| Combined + blend (test) ‡ | ~349 | **84.8%** | $0.0803 | 6.0× |
+
+> **‡** Blend parameters optimised on 80% train split, accuracy reported on held-out 20% test set.
 
 ## File Structure
 
 ```
 ├── judge.py                    # Shared judge logic: prompts, scoring, retry
-├── run_baselines.py            # Condition 0: vanilla baseline
-├── run_ensemble.py             # Condition 1: ensemble (n=k completions)
-├── run_escalation.py           # Condition 2: mini + full model scoring
-├── run_criteria.py             # Condition 3: task-specific criteria
-├── run_calibration.py          # Condition 4: calibration context
-├── run_combined.py             # Combined: criteria + calibration + escalation
-├── run_all.sh                  # Run all conditions sequentially
+├── collect.py                  # Unified data collection (replaces 6 old runners)
+├── run_all.sh                  # Run all collections sequentially
 ├── analysis/
-│   ├── compute_metrics.py      # All metric computation + CLI
-│   └── figures.py              # All figure generation
+│   ├── compute_metrics.py      # Derive conditions, compute metrics + CIs
+│   └── figures.py              # Generate all figures
 ├── results/                    # Generated by running experiments (gitignored)
-│   ├── raw/                    # JSONL results per condition
+│   ├── raw/                    # JSONL collections per prompt variant
 │   └── tables/
 │       └── all_metrics.json    # Computed metrics
 └── figures/                    # Pre-generated PNG figures (included in repo)
 ```
 
+## Experimental Design
+
+Each `collect.py` invocation collects k=8 scores from both mini and full models for every example. From this data, all conditions are derived offline:
+
+- **Baseline** = base collection, full model, subsample k=1
+- **Ensemble k=N** = base collection, full model, subsample k=N
+- **Mini only** = base collection, mini model
+- **Escalation** = base collection, mini+full, variance-based routing
+- **Soft blend** = base collection, mini+full, sigmoid weighting (params optimised on train split)
+- **Criteria** = criteria collection, full model
+- **Calibration** = cal-* collection, full model
+- **Combined** = combined collection, all techniques
+
+This design minimises API calls (each example is scored once per prompt variant) while maximising the number of conditions that can be analysed.
+
 ## Infrastructure Notes
 
-- All experiment scripts write results **incrementally** and support **resume** — if interrupted, restart the same command and it skips completed examples.
-- Run experiments in `tmux` to survive SSH disconnections.
-- The escalation and combined experiments collect both mini and full scores for every example, enabling offline analysis of escalation strategies without re-running API calls.
+- All collections write results **incrementally** (JSONL, flushed per example) and support **resume**.
+- Run in `tmux` to survive SSH disconnections.
+- `--sample-size 999` (default) runs the full dataset. Use a smaller value for quick tests.
 
 ## Citation
 
 ```bibtex
-@misc{lail2025llmjudge,
-  title={Practical Techniques for Improving LLM-as-Judge Accuracy on RewardBench 2},
+@misc{lail2026llmjudge,
+  title={Criteria Injection and Ensembling Are All You Need: A Systematic Evaluation of LLM Judge Techniques on RewardBench 2},
   author={Ryan Lail},
   year={2026},
-  url={https://github.com/composo-ai/llm-judge-ablations}
+  url={https://github.com/composo-ai/rb2-judge-techniques}
 }
 ```

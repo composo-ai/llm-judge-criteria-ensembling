@@ -1,6 +1,10 @@
 """Compute metrics for RB2 experiment results.
 
-Importable as a module or runnable as a script:
+Reads the unified collection format produced by collect.py and derives
+all experimental conditions offline. Supports train/test split for
+parameter-optimised conditions and bootstrap confidence intervals.
+
+Usage:
     python analysis/compute_metrics.py
 """
 
@@ -18,9 +22,16 @@ GPT54_OUTPUT_PER_M = 15.00
 GPT54_MINI_INPUT_PER_M = 0.25
 GPT54_MINI_OUTPUT_PER_M = 1.50
 
+RAW_DIR = Path("results/raw")
+TABLES_DIR = Path("results/tables")
 
-def load_results(filepath: str | Path) -> list[dict]:
-    """Load a JSONL file, filtering out refused examples."""
+
+# ===================================================================
+# Data loading
+# ===================================================================
+
+def load_collection(filepath: str | Path) -> list[dict]:
+    """Load a JSONL collection, filtering refused examples."""
     results = []
     with open(filepath) as f:
         for line in f:
@@ -32,155 +43,267 @@ def load_results(filepath: str | Path) -> list[dict]:
 
 def _mean_ignoring_none(values: list) -> float | None:
     valid = [v for v in values if v is not None]
-    if not valid:
-        return None
-    return float(np.mean(valid))
+    return float(np.mean(valid)) if valid else None
 
 
-def compute_accuracy(results: list[dict], k_subset: int | None = None) -> dict:
-    """Compute accuracy: fraction of examples where response 0 has the strictly highest mean score.
+# ===================================================================
+# Train/test split
+# ===================================================================
+
+def train_test_split(
+    data: list[dict], test_frac: float = 0.2, seed: int = 42
+) -> tuple[list[dict], list[dict]]:
+    """Stratified split by subset. Returns (train, test)."""
+    rng = np.random.RandomState(seed)
+    by_subset: dict[str, list[dict]] = defaultdict(list)
+    for r in data:
+        by_subset[r["subset"]].append(r)
+
+    train, test = [], []
+    for subset in sorted(by_subset):
+        items = by_subset[subset]
+        rng.shuffle(items)
+        n_test = max(1, int(len(items) * test_frac))
+        test.extend(items[:n_test])
+        train.extend(items[n_test:])
+    return train, test
+
+
+def intersect_collections(collections: dict[str, list[dict]]) -> set[str]:
+    """Return IDs present in all collections."""
+    id_sets = [set(r["id"] for r in c) for c in collections.values()]
+    return set.intersection(*id_sets) if id_sets else set()
+
+
+# ===================================================================
+# Accuracy (core metric)
+# ===================================================================
+
+def compute_accuracy(
+    data: list[dict],
+    model: str = "full",
+    k_subset: int | None = None,
+) -> dict:
+    """Fraction of examples where response 0 has strictly highest mean score.
 
     Args:
-        results: List of result dicts with 'all_scores' field.
-        k_subset: If set, use only the first k_subset calls per response.
-                  Enables diminishing returns analysis from a single k=8 run.
+        data: Collection results with {model}_scores fields.
+        model: Which model's scores to use ("mini" or "full").
+        k_subset: Use only first k scores per response (for diminishing returns).
     """
+    score_key = f"{model}_scores"
     by_subset = defaultdict(lambda: {"n": 0, "n_correct": 0, "n_tied": 0})
 
-    for r in results:
-        all_scores = r["all_scores"]
+    for r in data:
+        scores_per_resp = r.get(score_key)
+        if scores_per_resp is None:
+            continue
         subset = r["subset"]
-
-        # Compute mean score per response
         means = []
-        for scores in all_scores:
-            if k_subset is not None:
-                scores = scores[:k_subset]
-            means.append(_mean_ignoring_none(scores))
-
-        # Skip if any response has no valid scores
+        for scores in scores_per_resp:
+            s = scores[:k_subset] if k_subset else scores
+            means.append(_mean_ignoring_none(s))
         if any(m is None for m in means):
             continue
 
         max_score = max(means)
         winners = [i for i, m in enumerate(means) if m == max_score]
-
         by_subset[subset]["n"] += 1
         if len(winners) > 1:
             by_subset[subset]["n_tied"] += 1
-            # Ties = incorrect
         elif winners[0] == 0:
             by_subset[subset]["n_correct"] += 1
 
-    # Aggregate
     total_n = sum(s["n"] for s in by_subset.values())
     total_correct = sum(s["n_correct"] for s in by_subset.values())
     total_tied = sum(s["n_tied"] for s in by_subset.values())
 
     subset_metrics = {}
-    for subset, counts in sorted(by_subset.items()):
+    for sub, counts in sorted(by_subset.items()):
         n = counts["n"]
-        subset_metrics[subset] = {
+        subset_metrics[sub] = {
             "accuracy": counts["n_correct"] / n if n > 0 else 0.0,
-            "n": n,
-            "n_correct": counts["n_correct"],
-            "n_tied": counts["n_tied"],
+            "n": n, "n_correct": counts["n_correct"], "n_tied": counts["n_tied"],
         }
 
     return {
         "overall": total_correct / total_n if total_n > 0 else 0.0,
-        "n": total_n,
-        "n_correct": total_correct,
-        "n_tied": total_tied,
+        "n": total_n, "n_correct": total_correct, "n_tied": total_tied,
         "by_subset": subset_metrics,
     }
 
 
-def compute_variance_metrics(results: list[dict]) -> dict:
-    """Compute variance metrics for ensemble results (k > 1).
+# ===================================================================
+# Bootstrap confidence intervals
+# ===================================================================
 
-    Returns mean score std, per-subset breakdown, and correlation between
-    variance and correctness.
+def bootstrap_accuracy_ci(
+    data: list[dict],
+    model: str = "full",
+    k_subset: int | None = None,
+    n_bootstrap: int = 500,
+    alpha: float = 0.05,
+    seed: int = 42,
+) -> dict:
+    """Bootstrap CI for overall and per-subset accuracy."""
+    rng = np.random.RandomState(seed)
+    n = len(data)
+
+    overall_accs = []
+    subset_accs: dict[str, list[float]] = defaultdict(list)
+
+    for _ in range(n_bootstrap):
+        indices = rng.randint(0, n, size=n)
+        sample = [data[i] for i in indices]
+        acc = compute_accuracy(sample, model=model, k_subset=k_subset)
+        overall_accs.append(acc["overall"])
+        for sub, sub_data in acc["by_subset"].items():
+            subset_accs[sub].append(sub_data["accuracy"])
+
+    lo = alpha / 2 * 100
+    hi = (1 - alpha / 2) * 100
+
+    result = {
+        "overall": {
+            "mean": float(np.mean(overall_accs)),
+            "ci_low": float(np.percentile(overall_accs, lo)),
+            "ci_high": float(np.percentile(overall_accs, hi)),
+        },
+        "by_subset": {},
+    }
+    for sub in sorted(subset_accs):
+        vals = subset_accs[sub]
+        result["by_subset"][sub] = {
+            "mean": float(np.mean(vals)),
+            "ci_low": float(np.percentile(vals, lo)),
+            "ci_high": float(np.percentile(vals, hi)),
+        }
+    return result
+
+
+# ===================================================================
+# Cost
+# ===================================================================
+
+def compute_cost(data: list[dict]) -> dict:
+    """Compute actual dollar cost from token counts (total collection cost)."""
+    mini_in = mini_out = full_in = full_out = 0
+    for r in data:
+        c = r.get("cost", {})
+        if "mini_input_tokens" in c:
+            mini_in += c["mini_input_tokens"]
+            mini_out += c["mini_output_tokens"]
+        if "full_input_tokens" in c:
+            full_in += c["full_input_tokens"]
+            full_out += c["full_output_tokens"]
+
+    mini_cost = mini_in / 1e6 * GPT54_MINI_INPUT_PER_M + mini_out / 1e6 * GPT54_MINI_OUTPUT_PER_M
+    full_cost = full_in / 1e6 * GPT54_INPUT_PER_M + full_out / 1e6 * GPT54_OUTPUT_PER_M
+    total = mini_cost + full_cost
+    n = len(data) or 1
+    return {
+        "total_cost": total, "mini_cost": mini_cost, "full_cost": full_cost,
+        "cost_per_example": total / n, "n": len(data),
+    }
+
+
+def compute_deployment_cost(
+    data: list[dict],
+    models: str = "full",
+    k: int = 1,
+    collection_k: int = 8,
+) -> float:
+    """Estimate per-example deployment cost for a specific condition.
+
+    Collections gather both models at k=8, but each derived condition
+    uses only a subset of those calls. This function estimates what a
+    condition would cost if deployed independently.
+
+    Input tokens are charged once per API call (independent of n).
+    Output tokens scale linearly with k (the n parameter).
+
+    Args:
+        models: "full", "mini", or "both"
+        k: number of completions per response in the deployed condition
+        collection_k: k used during data collection (to scale output tokens)
     """
+    n = len(data) or 1
+    cost = 0.0
+    for r in data:
+        c = r.get("cost", {})
+        if models in ("full", "both"):
+            inp = c.get("full_input_tokens", 0)
+            out = c.get("full_output_tokens", 0)
+            # Output tokens scale with k; input charged once
+            scaled_out = out * k / collection_k
+            cost += inp / 1e6 * GPT54_INPUT_PER_M + scaled_out / 1e6 * GPT54_OUTPUT_PER_M
+        if models in ("mini", "both"):
+            inp = c.get("mini_input_tokens", 0)
+            out = c.get("mini_output_tokens", 0)
+            scaled_out = out * k / collection_k
+            cost += inp / 1e6 * GPT54_MINI_INPUT_PER_M + scaled_out / 1e6 * GPT54_MINI_OUTPUT_PER_M
+    return cost / n
+
+
+# ===================================================================
+# Variance metrics
+# ===================================================================
+
+def compute_variance_metrics(data: list[dict], model: str = "full") -> dict:
+    """Variance as error signal analysis."""
+    score_key = f"{model}_scores"
     all_stds = []
-    by_subset = defaultdict(
-        lambda: {"stds_correct": [], "stds_incorrect": [], "all_stds": []}
-    )
+    by_subset = defaultdict(lambda: {"stds_correct": [], "stds_incorrect": [], "all_stds": []})
 
-    for r in results:
-        all_scores = r["all_scores"]
-        subset = r["subset"]
+    for r in data:
+        scores_per_resp = r.get(score_key)
+        if scores_per_resp is None:
+            continue
 
-        # Compute per-response std
-        response_stds = []
-        means = []
-        for scores in all_scores:
+        response_stds, means = [], []
+        for scores in scores_per_resp:
             valid = [s for s in scores if s is not None]
-            if len(valid) > 1:
-                response_stds.append(float(np.std(valid)))
-            else:
-                response_stds.append(0.0)
+            response_stds.append(float(np.std(valid)) if len(valid) > 1 else 0.0)
             means.append(_mean_ignoring_none(scores))
-
         if any(m is None for m in means):
             continue
 
-        example_mean_std = float(np.mean(response_stds))
-        all_stds.append(example_mean_std)
-
-        # Determine correctness
+        example_std = float(np.mean(response_stds))
+        all_stds.append(example_std)
         max_score = max(means)
         winners = [i for i, m in enumerate(means) if m == max_score]
         correct = len(winners) == 1 and winners[0] == 0
+        subset = r["subset"]
+        by_subset[subset]["all_stds"].append(example_std)
+        (by_subset[subset]["stds_correct"] if correct else by_subset[subset]["stds_incorrect"]).append(example_std)
 
-        by_subset[subset]["all_stds"].append(example_mean_std)
-        if correct:
-            by_subset[subset]["stds_correct"].append(example_mean_std)
-        else:
-            by_subset[subset]["stds_incorrect"].append(example_mean_std)
-
-    # Compute correlation between variance and correctness
-    correctness_labels = []
-    variance_values = []
-    for r in results:
-        all_scores = r["all_scores"]
-        response_stds = []
-        means = []
-        for scores in all_scores:
+    # Pearson correlation
+    corr = None
+    labels, variances = [], []
+    for r in data:
+        scores_per_resp = r.get(score_key)
+        if scores_per_resp is None:
+            continue
+        stds, means = [], []
+        for scores in scores_per_resp:
             valid = [s for s in scores if s is not None]
-            if len(valid) > 1:
-                response_stds.append(float(np.std(valid)))
-            else:
-                response_stds.append(0.0)
+            stds.append(float(np.std(valid)) if len(valid) > 1 else 0.0)
             means.append(_mean_ignoring_none(scores))
-
         if any(m is None for m in means):
             continue
-
-        max_score = max(means)
-        winners = [i for i, m in enumerate(means) if m == max_score]
-        correct = 1 if (len(winners) == 1 and winners[0] == 0) else 0
-
-        correctness_labels.append(correct)
-        variance_values.append(float(np.mean(response_stds)))
-
-    corr = None
-    if len(correctness_labels) >= 3:
-        r_val, _ = stats.pearsonr(variance_values, correctness_labels)
-        corr = float(r_val)
+        max_s = max(means)
+        w = [i for i, m in enumerate(means) if m == max_s]
+        labels.append(1 if len(w) == 1 and w[0] == 0 else 0)
+        variances.append(float(np.mean(stds)))
+    if len(labels) >= 3:
+        corr = float(stats.pearsonr(variances, labels)[0])
 
     subset_metrics = {}
-    for subset, data in sorted(by_subset.items()):
-        subset_metrics[subset] = {
-            "mean_std": float(np.mean(data["all_stds"])) if data["all_stds"] else 0.0,
-            "std_when_correct": (
-                float(np.mean(data["stds_correct"])) if data["stds_correct"] else 0.0
-            ),
-            "std_when_incorrect": (
-                float(np.mean(data["stds_incorrect"]))
-                if data["stds_incorrect"]
-                else 0.0
-            ),
+    for sub, d in sorted(by_subset.items()):
+        subset_metrics[sub] = {
+            "mean_std": float(np.mean(d["all_stds"])) if d["all_stds"] else 0.0,
+            "std_when_correct": float(np.mean(d["stds_correct"])) if d["stds_correct"] else 0.0,
+            "std_when_incorrect": float(np.mean(d["stds_incorrect"])) if d["stds_incorrect"] else 0.0,
         }
 
     return {
@@ -190,102 +313,76 @@ def compute_variance_metrics(results: list[dict]) -> dict:
     }
 
 
-def compute_escalation_metrics(
-    results: list[dict], thresholds: list[float] | None = None
-) -> dict:
-    """Compute escalation metrics across multiple variance thresholds.
+# ===================================================================
+# Escalation: hard routing
+# ===================================================================
 
-    For each threshold, applies the policy: if mini std < threshold, use mini
-    mean score; else use full mean score. Returns accuracy and cost at each threshold.
-    """
-    if not results:
+def _compute_mini_stds(data: list[dict]) -> list[list[float]]:
+    """Compute per-response mini stds for each example."""
+    result = []
+    for r in data:
+        stds = []
+        for scores in r.get("mini_scores", []):
+            valid = [s for s in scores if s is not None]
+            stds.append(float(np.std(valid)) if len(valid) > 1 else 0.0)
+        result.append(stds)
+    return result
+
+
+def compute_escalation_metrics(
+    data: list[dict], thresholds: list[float] | None = None
+) -> dict:
+    if not data:
         return {"thresholds": [], "reference": {}}
 
-    # Collect all mini stds for percentile-based thresholds
-    all_mini_stds = []
-    for r in results:
-        for std_val in r.get("mini_stds", []):
-            if std_val is not None:
-                all_mini_stds.append(std_val)
+    all_stds = _compute_mini_stds(data)
+    flat_stds = [s for stds in all_stds for s in stds]
 
     if thresholds is None:
-        # Combine percentile-based and fixed thresholds
-        if all_mini_stds:
-            pct_thresholds = [
-                float(np.percentile(all_mini_stds, p)) for p in range(10, 100, 10)
-            ]
-        else:
-            pct_thresholds = []
-        fixed_thresholds = [i * 0.1 for i in range(21)]  # 0.0 to 2.0
-        thresholds = sorted(set(pct_thresholds + fixed_thresholds))
+        pct = [float(np.percentile(flat_stds, p)) for p in range(10, 100, 10)] if flat_stds else []
+        fixed = [i * 0.1 for i in range(21)]
+        thresholds = sorted(set(pct + fixed))
 
-    # Reference points
-    def _accuracy_from_scores(results, score_key, k_sub=None):
-        """Compute accuracy using a specific score field."""
-        adapted = []
-        for r in results:
-            adapted.append(
-                {
-                    "id": r["id"],
-                    "subset": r["subset"],
-                    "all_scores": r[score_key],
-                }
-            )
-        return compute_accuracy(adapted, k_subset=k_sub)
-
-    reference = {
-        "always_mini": _accuracy_from_scores(results, "mini_scores"),
-        "always_full": _accuracy_from_scores(results, "full_scores"),
-        "always_mini_k1": _accuracy_from_scores(results, "mini_scores", k_sub=1),
-        "always_full_k1": _accuracy_from_scores(results, "full_scores", k_sub=1),
+    # Reference
+    ref = {
+        "mini_k8": compute_accuracy(data, model="mini"),
+        "full_k8": compute_accuracy(data, model="full"),
+        "mini_k1": compute_accuracy(data, model="mini", k_subset=1),
+        "full_k1": compute_accuracy(data, model="full", k_subset=1),
     }
 
-    # Compute total full-model cost as reference for cost ratio
     total_full_cost = sum(
-        r["cost"]["full_input_tokens"] / 1e6 * GPT54_INPUT_PER_M
-        + r["cost"]["full_output_tokens"] / 1e6 * GPT54_OUTPUT_PER_M
-        for r in results
+        r["cost"].get("full_input_tokens", 0) / 1e6 * GPT54_INPUT_PER_M
+        + r["cost"].get("full_output_tokens", 0) / 1e6 * GPT54_OUTPUT_PER_M
+        for r in data
     )
     total_mini_cost = sum(
-        r["cost"]["mini_input_tokens"] / 1e6 * GPT54_MINI_INPUT_PER_M
-        + r["cost"]["mini_output_tokens"] / 1e6 * GPT54_MINI_OUTPUT_PER_M
-        for r in results
+        r["cost"].get("mini_input_tokens", 0) / 1e6 * GPT54_MINI_INPUT_PER_M
+        + r["cost"].get("mini_output_tokens", 0) / 1e6 * GPT54_MINI_OUTPUT_PER_M
+        for r in data
     )
-    always_full_cost = (
-        total_mini_cost + total_full_cost
-    )  # We always pay for both in our data
+    total_cost = total_mini_cost + total_full_cost
 
-    # Threshold sweep
-    threshold_results = []
+    results_list = []
     for threshold in thresholds:
-        by_subset = defaultdict(lambda: {"n": 0, "n_correct": 0})
-        total_escalated = 0
-        total_responses = 0
+        by_sub = defaultdict(lambda: {"n": 0, "n_correct": 0})
+        n_escalated = n_total = 0
 
-        for r in results:
+        for ri, r in enumerate(data):
             mini_scores = r["mini_scores"]
             full_scores = r["full_scores"]
-            mini_stds = r.get("mini_stds", [])
-            subset = r["subset"]
-
+            stds = all_stds[ri]
             final_means = []
-            for i in range(len(mini_scores)):
-                mini_valid = [s for s in mini_scores[i] if s is not None]
-                full_valid = [s for s in full_scores[i] if s is not None]
-
+            for j in range(len(mini_scores)):
+                mini_valid = [s for s in mini_scores[j] if s is not None]
+                full_valid = [s for s in full_scores[j] if s is not None]
                 mini_mean = float(np.mean(mini_valid)) if mini_valid else None
                 full_mean = float(np.mean(full_valid)) if full_valid else None
-
-                std = (
-                    mini_stds[i]
-                    if i < len(mini_stds) and mini_stds[i] is not None
-                    else 0.0
-                )
-
-                total_responses += 1
+                std = stds[j] if j < len(stds) else 0.0
+                n_total += 1
                 if std >= threshold and full_mean is not None:
                     final_means.append(full_mean)
-                    total_escalated += 1
+                    n_escalated += 1
                 elif mini_mean is not None:
                     final_means.append(mini_mean)
                 else:
@@ -293,740 +390,507 @@ def compute_escalation_metrics(
 
             if any(m is None for m in final_means):
                 continue
-
-            max_score = max(final_means)
-            winners = [i for i, m in enumerate(final_means) if m == max_score]
-
-            by_subset[subset]["n"] += 1
+            max_s = max(final_means)
+            winners = [i for i, m in enumerate(final_means) if m == max_s]
+            by_sub[r["subset"]]["n"] += 1
             if len(winners) == 1 and winners[0] == 0:
-                by_subset[subset]["n_correct"] += 1
+                by_sub[r["subset"]]["n_correct"] += 1
 
-        total_n = sum(s["n"] for s in by_subset.values())
-        total_correct = sum(s["n_correct"] for s in by_subset.values())
-        pct_escalated = (
-            total_escalated / total_responses if total_responses > 0 else 0.0
-        )
+        tot_n = sum(s["n"] for s in by_sub.values())
+        tot_c = sum(s["n_correct"] for s in by_sub.values())
+        pct_esc = n_escalated / n_total if n_total else 0.0
+        eff_cost = total_mini_cost + pct_esc * total_full_cost
+        cost_ratio = eff_cost / total_cost if total_cost else 1.0
 
-        # Cost ratio: mini is always paid, full only for escalated responses
-        # Approximate: cost = mini_cost + (pct_escalated * full_cost)
-        effective_cost = total_mini_cost + pct_escalated * total_full_cost
-        cost_ratio = effective_cost / always_full_cost if always_full_cost > 0 else 1.0
+        results_list.append({
+            "threshold": float(threshold),
+            "accuracy": tot_c / tot_n if tot_n else 0.0,
+            "pct_escalated": pct_esc,
+            "effective_cost_ratio": cost_ratio,
+            "n": tot_n,
+        })
 
-        subset_metrics = {}
-        for subset, counts in sorted(by_subset.items()):
-            n = counts["n"]
-            subset_metrics[subset] = {
-                "accuracy": counts["n_correct"] / n if n > 0 else 0.0,
-                "n": n,
-                "n_correct": counts["n_correct"],
-            }
-
-        threshold_results.append(
-            {
-                "threshold": float(threshold),
-                "accuracy": total_correct / total_n if total_n > 0 else 0.0,
-                "pct_escalated": pct_escalated,
-                "effective_cost_ratio": cost_ratio,
-                "n": total_n,
-                "by_subset": subset_metrics,
-            }
-        )
-
-    return {
-        "thresholds": threshold_results,
-        "reference": {k: v for k, v in reference.items()},
-    }
+    return {"thresholds": results_list, "reference": ref}
 
 
-def compute_escalation_metrics_blended(
-    results: list[dict], thresholds: list[float] | None = None, steepness: float = 10.0
+# ===================================================================
+# Escalation: soft blending
+# ===================================================================
+
+def _sigmoid(x):
+    return 1.0 / (1.0 + np.exp(-np.clip(x, -500, 500)))
+
+
+def compute_blend_accuracy(
+    data: list[dict], midpoint: float, steepness: float = 10.0
 ) -> dict:
-    """Soft blending escalation: blend mini and full scores based on per-response variance.
+    """Compute accuracy using soft blend at a single midpoint."""
+    all_stds = _compute_mini_stds(data)
+    by_sub = defaultdict(lambda: {"n": 0, "n_correct": 0})
+    weights = []
 
-    For each response i:
-        w_i = sigmoid(steepness * (sigma_i - midpoint))
-        final_score_i = (1 - w_i) * mini_mean_i + w_i * full_mean_i
+    for ri, r in enumerate(data):
+        stds = all_stds[ri]
+        final_means = []
+        for j in range(len(r["mini_scores"])):
+            std_j = stds[j] if j < len(stds) else 0.0
+            w = float(_sigmoid(steepness * (std_j - midpoint)))
+            weights.append(w)
+            mini_valid = [s for s in r["mini_scores"][j] if s is not None]
+            full_valid = [s for s in r["full_scores"][j] if s is not None]
+            mini_m = float(np.mean(mini_valid)) if mini_valid else None
+            full_m = float(np.mean(full_valid)) if full_valid else None
+            if mini_m is not None and full_m is not None:
+                final_means.append((1 - w) * mini_m + w * full_m)
+            elif full_m is not None:
+                final_means.append(full_m)
+            elif mini_m is not None:
+                final_means.append(mini_m)
+            else:
+                final_means.append(None)
 
-    The threshold parameter sweeps the sigmoid midpoint.
-    """
-    if not results:
-        return {"thresholds": [], "reference": {}}
+        if any(m is None for m in final_means):
+            continue
+        max_s = max(final_means)
+        winners = [i for i, m in enumerate(final_means) if m == max_s]
+        by_sub[r["subset"]]["n"] += 1
+        if len(winners) == 1 and winners[0] == 0:
+            by_sub[r["subset"]]["n_correct"] += 1
 
-    all_response_stds = []
-    for r in results:
-        for s in r.get("mini_stds", []):
-            if s is not None:
-                all_response_stds.append(float(s))
+    tot_n = sum(s["n"] for s in by_sub.values())
+    tot_c = sum(s["n_correct"] for s in by_sub.values())
 
-    if thresholds is None:
-        if all_response_stds:
-            pct_thresholds = [
-                float(np.percentile(all_response_stds, p)) for p in range(10, 100, 10)
-            ]
-        else:
-            pct_thresholds = []
-        fixed_thresholds = [i * 0.1 for i in range(21)]
-        thresholds = sorted(set(pct_thresholds + fixed_thresholds))
-
-    # Reference points
-    def _accuracy_from_scores(results, score_key, k_sub=None):
-        adapted = [
-            {"id": r["id"], "subset": r["subset"], "all_scores": r[score_key]}
-            for r in results
-        ]
-        return compute_accuracy(adapted, k_subset=k_sub)
-
-    reference = {
-        "always_mini": _accuracy_from_scores(results, "mini_scores"),
-        "always_full": _accuracy_from_scores(results, "full_scores"),
-        "always_mini_k1": _accuracy_from_scores(results, "mini_scores", k_sub=1),
-        "always_full_k1": _accuracy_from_scores(results, "full_scores", k_sub=1),
+    subset_metrics = {
+        sub: {"accuracy": c["n_correct"] / c["n"] if c["n"] else 0.0, "n": c["n"]}
+        for sub, c in sorted(by_sub.items())
+    }
+    return {
+        "accuracy": tot_c / tot_n if tot_n else 0.0,
+        "mean_weight": float(np.mean(weights)) if weights else 0.0,
+        "n": tot_n,
+        "by_subset": subset_metrics,
     }
 
-    total_full_cost = sum(
-        r["cost"]["full_input_tokens"] / 1e6 * GPT54_INPUT_PER_M
-        + r["cost"]["full_output_tokens"] / 1e6 * GPT54_OUTPUT_PER_M
-        for r in results
-    )
-    total_mini_cost = sum(
-        r["cost"]["mini_input_tokens"] / 1e6 * GPT54_MINI_INPUT_PER_M
-        + r["cost"]["mini_output_tokens"] / 1e6 * GPT54_MINI_OUTPUT_PER_M
-        for r in results
-    )
-    always_full_cost = total_mini_cost + total_full_cost
 
-    def _sigmoid(x):
-        return 1.0 / (1.0 + np.exp(-x))
+def optimise_blend(
+    train: list[dict], test: list[dict], steepness: float = 10.0
+) -> dict:
+    """Find best blend midpoint on train, evaluate on test."""
+    all_stds = _compute_mini_stds(train)
+    unique_stds = sorted(set(s for stds in all_stds for s in stds))
 
-    threshold_results = []
-    for midpoint in thresholds:
-        by_subset = defaultdict(lambda: {"n": 0, "n_correct": 0})
-        all_weights = []
+    best_m, best_acc = 0.0, 0.0
+    for m in unique_stds:
+        acc = compute_blend_accuracy(train, m, steepness)["accuracy"]
+        if acc > best_acc:
+            best_acc = acc
+            best_m = m
 
-        for r in results:
-            mini_scores = r["mini_scores"]
-            full_scores = r["full_scores"]
-            mini_stds = r.get("mini_stds", [])
-            subset = r["subset"]
-
-            final_means = []
-            response_weights = []
-            for i in range(len(mini_scores)):
-                std_i = float(mini_stds[i]) if i < len(mini_stds) and mini_stds[i] is not None else 0.0
-                w_i = float(_sigmoid(steepness * (std_i - midpoint)))
-                response_weights.append(w_i)
-
-                mini_valid = [s for s in mini_scores[i] if s is not None]
-                full_valid = [s for s in full_scores[i] if s is not None]
-                mini_mean = float(np.mean(mini_valid)) if mini_valid else None
-                full_mean = float(np.mean(full_valid)) if full_valid else None
-
-                if mini_mean is not None and full_mean is not None:
-                    blended = (1 - w_i) * mini_mean + w_i * full_mean
-                    final_means.append(blended)
-                elif full_mean is not None:
-                    final_means.append(full_mean)
-                elif mini_mean is not None:
-                    final_means.append(mini_mean)
-                else:
-                    final_means.append(None)
-
-            all_weights.extend(response_weights)
-
-            if any(m is None for m in final_means):
-                continue
-
-            max_score = max(final_means)
-            winners = [i for i, m in enumerate(final_means) if m == max_score]
-
-            by_subset[subset]["n"] += 1
-            if len(winners) == 1 and winners[0] == 0:
-                by_subset[subset]["n_correct"] += 1
-
-        total_n = sum(s["n"] for s in by_subset.values())
-        total_correct = sum(s["n_correct"] for s in by_subset.values())
-        mean_weight = float(np.mean(all_weights)) if all_weights else 0.0
-
-        effective_cost = total_mini_cost + total_full_cost
-        cost_ratio = effective_cost / always_full_cost if always_full_cost > 0 else 1.0
-
-        subset_metrics = {}
-        for subset, counts in sorted(by_subset.items()):
-            n = counts["n"]
-            subset_metrics[subset] = {
-                "accuracy": counts["n_correct"] / n if n > 0 else 0.0,
-                "n": n,
-                "n_correct": counts["n_correct"],
-            }
-
-        threshold_results.append(
-            {
-                "threshold": float(midpoint),
-                "accuracy": total_correct / total_n if total_n > 0 else 0.0,
-                "mean_weight": mean_weight,
-                "effective_cost_ratio": cost_ratio,
-                "steepness": steepness,
-                "n": total_n,
-                "by_subset": subset_metrics,
-            }
-        )
+    train_result = compute_blend_accuracy(train, best_m, steepness)
+    test_result = compute_blend_accuracy(test, best_m, steepness)
 
     return {
-        "thresholds": threshold_results,
-        "reference": {k: v for k, v in reference.items()},
+        "best_midpoint": best_m,
+        "steepness": steepness,
+        "train_accuracy": train_result["accuracy"],
+        "test_accuracy": test_result["accuracy"],
+        "test_by_subset": test_result["by_subset"],
+        "test_n": test_result["n"],
+        "test_mean_weight": test_result["mean_weight"],
     }
 
 
-def _piecewise_linear_n2(
-    sigma: float, sigma1: float, sigma2: float, n_max: int = 8
-) -> int:
-    """Piecewise linear function mapping variance to ensemble size."""
+# ===================================================================
+# Escalation: variance-informed ensembling
+# ===================================================================
+
+def _piecewise_linear_n2(sigma, sigma1, sigma2, n_max=8):
     if sigma <= sigma1:
         return 1
     elif sigma >= sigma2:
         return n_max
     else:
-        n2 = 1 + (sigma - sigma1) * (n_max - 1) / (sigma2 - sigma1)
-        return max(1, min(n_max, round(n2)))
+        return max(1, min(n_max, round(1 + (sigma - sigma1) * (n_max - 1) / (sigma2 - sigma1))))
 
 
-def compute_variance_informed_ensembling(
-    results: list[dict], n_max: int = 8, grid_steps: int = 15
+def compute_var_informed_accuracy(
+    data: list[dict], sigma1: float, sigma2: float, n_max: int = 8
 ) -> dict:
-    """Variance-informed ensembling: use mini variance to decide how many full model calls.
+    all_stds = _compute_mini_stds(data)
+    by_sub = defaultdict(lambda: {"n": 0, "n_correct": 0})
+    total_n2 = 0
 
-    For each (sigma1, sigma2) parameter pair, applies a piecewise linear function
-    to map per-response mini variance to n2 (number of full model calls per response).
-    Evaluates accuracy using the first n2 full scores for each response independently.
-    """
-    if not results:
-        return {
-            "grid_results": [],
-            "best": None,
-            "best_cost_constrained": None,
-            "reference": {},
-            "by_n2": [],
-        }
+    for ri, r in enumerate(data):
+        stds = all_stds[ri]
+        final_means = []
+        for j, scores in enumerate(r["full_scores"]):
+            std_j = stds[j] if j < len(stds) else 0.0
+            n2 = _piecewise_linear_n2(std_j, sigma1, sigma2, n_max)
+            total_n2 += n2
+            valid = [s for s in scores[:n2] if s is not None]
+            final_means.append(float(np.mean(valid)) if valid else None)
 
-    # Compute per-response stds
-    per_response_stds = []
-    all_response_stds = []
-    for r in results:
-        stds = []
-        for s in r.get("mini_stds", []):
-            val = float(s) if s is not None else 0.0
-            stds.append(val)
-            all_response_stds.append(val)
-        per_response_stds.append(stds)
+        if any(m is None for m in final_means):
+            continue
+        max_s = max(final_means)
+        winners = [i for i, m in enumerate(final_means) if m == max_s]
+        by_sub[r["subset"]]["n"] += 1
+        if len(winners) == 1 and winners[0] == 0:
+            by_sub[r["subset"]]["n_correct"] += 1
 
-    # Reference: accuracy at each fixed n2
-    def _accuracy_at_fixed_k(results, k):
-        adapted = [
-            {"id": r["id"], "subset": r["subset"], "all_scores": r["full_scores"]}
-            for r in results
-        ]
-        return compute_accuracy(adapted, k_subset=k)
-
-    by_n2 = []
-    for k in range(1, n_max + 1):
-        acc = _accuracy_at_fixed_k(results, k)
-        by_n2.append(
-            {
-                "n2": k,
-                "accuracy": acc["overall"],
-                "n": acc["n"],
-                "by_subset": {s: d["accuracy"] for s, d in acc["by_subset"].items()},
-            }
-        )
-
-    # Reference points
-    def _accuracy_from_scores(results, score_key, k_sub=None):
-        adapted = [
-            {"id": r["id"], "subset": r["subset"], "all_scores": r[score_key]}
-            for r in results
-        ]
-        return compute_accuracy(adapted, k_subset=k_sub)
-
-    reference = {
-        "always_mini": _accuracy_from_scores(results, "mini_scores"),
-        "always_full": _accuracy_from_scores(results, "full_scores"),
-        "full_k1": _accuracy_from_scores(results, "full_scores", k_sub=1),
-    }
-
-    # Cost baselines
-    total_full_cost = sum(
-        r["cost"]["full_input_tokens"] / 1e6 * GPT54_INPUT_PER_M
-        + r["cost"]["full_output_tokens"] / 1e6 * GPT54_OUTPUT_PER_M
-        for r in results
-    )
-    total_mini_cost = sum(
-        r["cost"]["mini_input_tokens"] / 1e6 * GPT54_MINI_INPUT_PER_M
-        + r["cost"]["mini_output_tokens"] / 1e6 * GPT54_MINI_OUTPUT_PER_M
-        for r in results
-    )
-    always_full_cost = total_mini_cost + total_full_cost
-
-    # Build grid of sigma1, sigma2 from percentiles of per-response stds
-    percentiles = [
-        float(np.percentile(all_response_stds, p)) for p in np.linspace(0, 95, grid_steps)
-    ]
-    # Add some fixed values
-    fixed_vals = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.8, 1.0]
-    sigma_vals = sorted(set(percentiles + fixed_vals))
-
-    grid_results = []
-    for sigma1 in sigma_vals:
-        for sigma2 in sigma_vals:
-            if sigma2 <= sigma1:
-                continue
-
-            by_subset = defaultdict(lambda: {"n": 0, "n_correct": 0})
-            total_n2 = 0
-            total_examples = 0
-
-            for i, r in enumerate(results):
-                total_examples += 1
-
-                # Take first n2_j full scores per response, where n2_j depends on that response's variance
-                final_means = []
-                resp_stds = per_response_stds[i]
-                for j, scores in enumerate(r["full_scores"]):
-                    std_j = resp_stds[j] if j < len(resp_stds) else 0.0
-                    n2_j = _piecewise_linear_n2(std_j, sigma1, sigma2, n_max)
-                    total_n2 += n2_j
-                    valid = [s for s in scores[:n2_j] if s is not None]
-                    final_means.append(float(np.mean(valid)) if valid else None)
-
-                if any(m is None for m in final_means):
-                    continue
-
-                max_score = max(final_means)
-                winners = [idx for idx, m in enumerate(final_means) if m == max_score]
-                subset = r["subset"]
-                by_subset[subset]["n"] += 1
-                if len(winners) == 1 and winners[0] == 0:
-                    by_subset[subset]["n_correct"] += 1
-
-            total_n = sum(s["n"] for s in by_subset.values())
-            total_correct = sum(s["n_correct"] for s in by_subset.values())
-            num_responses = 4
-            mean_n2 = total_n2 / (total_examples * num_responses) if total_examples > 0 else 1.0
-
-            # Cost: mini always + (mean_n2 / n_max) * full
-            effective_cost = total_mini_cost + (mean_n2 / n_max) * total_full_cost
-            cost_ratio = (
-                effective_cost / always_full_cost if always_full_cost > 0 else 1.0
-            )
-
-            subset_metrics = {}
-            for subset, counts in sorted(by_subset.items()):
-                n = counts["n"]
-                subset_metrics[subset] = {
-                    "accuracy": counts["n_correct"] / n if n > 0 else 0.0,
-                    "n": n,
-                    "n_correct": counts["n_correct"],
-                }
-
-            grid_results.append(
-                {
-                    "sigma1": float(sigma1),
-                    "sigma2": float(sigma2),
-                    "accuracy": total_correct / total_n if total_n > 0 else 0.0,
-                    "mean_n2": mean_n2,
-                    "effective_cost_ratio": cost_ratio,
-                    "n": total_n,
-                    "by_subset": subset_metrics,
-                }
-            )
-
-    # Find best overall and best cost-constrained
-    best = max(grid_results, key=lambda g: g["accuracy"]) if grid_results else None
-    cost_constrained = [g for g in grid_results if g["mean_n2"] <= 2.0]
-    best_cost_constrained = (
-        max(cost_constrained, key=lambda g: g["accuracy"]) if cost_constrained else None
-    )
+    tot_n = sum(s["n"] for s in by_sub.values())
+    tot_c = sum(s["n_correct"] for s in by_sub.values())
+    n_responses = len(data) * 4 or 1
+    mean_n2 = total_n2 / n_responses
 
     return {
-        "grid_results": grid_results,
-        "best": best,
-        "best_cost_constrained": best_cost_constrained,
-        "reference": {k: v for k, v in reference.items()},
-        "by_n2": by_n2,
+        "accuracy": tot_c / tot_n if tot_n else 0.0,
+        "mean_n2": mean_n2,
+        "n": tot_n,
     }
 
 
-def compute_ensemble_convergence(results: list[dict]) -> dict:
-    """Compute how mini-full agreement changes with ensemble size.
+def optimise_var_informed(
+    train: list[dict], test: list[dict], n_max: int = 8, grid_steps: int = 15,
+) -> dict:
+    all_stds = _compute_mini_stds(train)
+    flat = [s for stds in all_stds for s in stds]
+    pct = [float(np.percentile(flat, p)) for p in np.linspace(0, 95, grid_steps)]
+    fixed = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.8, 1.0]
+    sigma_vals = sorted(set(pct + fixed))
 
-    For k_subset in 1..max_k: compute mini's winner using first k_subset calls,
-    full's winner using all calls. Report agreement rate and rank correlation.
-    """
-    if not results:
-        return {"by_k": [], "by_k_and_subset": {}}
+    best, best_constrained = None, None
+    grid = []
+    for s1 in sigma_vals:
+        for s2 in sigma_vals:
+            if s2 <= s1:
+                continue
+            r = compute_var_informed_accuracy(train, s1, s2, n_max)
+            grid.append({"sigma1": s1, "sigma2": s2, **r})
+            if best is None or r["accuracy"] > best["accuracy"]:
+                best = {"sigma1": s1, "sigma2": s2, **r}
+            if r["mean_n2"] <= 2.0 and (best_constrained is None or r["accuracy"] > best_constrained["accuracy"]):
+                best_constrained = {"sigma1": s1, "sigma2": s2, **r}
 
-    max_mini_k = min(len(r["mini_scores"][0]) for r in results)
+    # Evaluate on test
+    test_best = test_constrained = None
+    if best:
+        test_best = compute_var_informed_accuracy(test, best["sigma1"], best["sigma2"], n_max)
+    if best_constrained:
+        test_constrained = compute_var_informed_accuracy(
+            test, best_constrained["sigma1"], best_constrained["sigma2"], n_max)
+
+    return {
+        "train_best": best,
+        "train_best_constrained": best_constrained,
+        "test_best": test_best,
+        "test_best_constrained": test_constrained,
+        "grid_results": grid,
+    }
+
+
+# ===================================================================
+# Mini-full convergence
+# ===================================================================
+
+def compute_ensemble_convergence(data: list[dict]) -> dict:
+    if not data or "mini_scores" not in data[0]:
+        return {"by_k": []}
+
+    max_k = min(len(r["mini_scores"][0]) for r in data)
     full_winners = {}
-
-    # Compute full model winners (ground truth)
-    for r in results:
-        means = [_mean_ignoring_none(scores) for scores in r["full_scores"]]
+    for r in data:
+        means = [_mean_ignoring_none(s) for s in r["full_scores"]]
         if any(m is None for m in means):
             continue
-        max_score = max(means)
-        winners = [i for i, m in enumerate(means) if m == max_score]
-        full_winners[r["id"]] = {
-            "winner": winners[0] if len(winners) == 1 else -1,
-            "means": means,
-            "subset": r["subset"],
-        }
+        max_s = max(means)
+        w = [i for i, m in enumerate(means) if m == max_s]
+        full_winners[r["id"]] = {"winner": w[0] if len(w) == 1 else -1, "means": means}
 
     by_k = []
-    by_k_and_subset = defaultdict(list)
-
-    for k in range(1, max_mini_k + 1):
-        agreements = []
-        rank_corrs = []
-        subset_data = defaultdict(lambda: {"agreements": [], "rank_corrs": []})
-
-        for r in results:
+    for k in range(1, max_k + 1):
+        agreements, rank_corrs = [], []
+        for r in data:
             if r["id"] not in full_winners:
                 continue
-
-            mini_means = [
-                _mean_ignoring_none(scores[:k]) for scores in r["mini_scores"]
-            ]
+            mini_means = [_mean_ignoring_none(s[:k]) for s in r["mini_scores"]]
             if any(m is None for m in mini_means):
                 continue
-
-            max_mini = max(mini_means)
-            mini_winners = [i for i, m in enumerate(mini_means) if m == max_mini]
-            mini_winner = mini_winners[0] if len(mini_winners) == 1 else -1
-
-            full_info = full_winners[r["id"]]
-            agreed = (
-                1 if mini_winner == full_info["winner"] and mini_winner != -1 else 0
-            )
-            agreements.append(agreed)
-
-            # Spearman rank correlation between mini and full mean scores
+            max_m = max(mini_means)
+            mw = [i for i, m in enumerate(mini_means) if m == max_m]
+            mini_winner = mw[0] if len(mw) == 1 else -1
+            fw = full_winners[r["id"]]
+            agreements.append(1 if mini_winner == fw["winner"] and mini_winner != -1 else 0)
             if len(mini_means) >= 3:
-                rho, _ = stats.spearmanr(mini_means, full_info["means"])
+                rho, _ = stats.spearmanr(mini_means, fw["means"])
                 if not np.isnan(rho):
                     rank_corrs.append(float(rho))
 
-            subset = full_info["subset"]
-            subset_data[subset]["agreements"].append(agreed)
-            if len(mini_means) >= 3:
-                rho, _ = stats.spearmanr(mini_means, full_info["means"])
-                if not np.isnan(rho):
-                    subset_data[subset]["rank_corrs"].append(float(rho))
-
-        entry = {
+        by_k.append({
             "k": k,
-            "agreement_with_full": float(np.mean(agreements)) if agreements else 0.0,
+            "agreement": float(np.mean(agreements)) if agreements else 0.0,
             "rank_correlation": float(np.mean(rank_corrs)) if rank_corrs else None,
-        }
-        by_k.append(entry)
-
-        for subset, data in subset_data.items():
-            by_k_and_subset[subset].append(
-                {
-                    "k": k,
-                    "agreement_with_full": (
-                        float(np.mean(data["agreements"]))
-                        if data["agreements"]
-                        else 0.0
-                    ),
-                    "rank_correlation": (
-                        float(np.mean(data["rank_corrs"]))
-                        if data["rank_corrs"]
-                        else None
-                    ),
-                }
-            )
-
-    return {
-        "by_k": by_k,
-        "by_k_and_subset": dict(by_k_and_subset),
-    }
+        })
+    return {"by_k": by_k}
 
 
-def compute_cost(
-    results: list[dict],
-    price_per_1m_input: float = GPT54_INPUT_PER_M,
-    price_per_1m_output: float = GPT54_OUTPUT_PER_M,
-) -> dict:
-    """Compute dollar cost from token counts."""
-    # Detect format from first result
-    is_escalation_format = "mini_input_tokens" in results[0].get("cost", {})
-
-    if is_escalation_format:
-        total_mini_cost = 0.0
-        total_full_cost = 0.0
-        for r in results:
-            cost = r["cost"]
-            total_mini_cost += (
-                cost["mini_input_tokens"] / 1e6 * GPT54_MINI_INPUT_PER_M
-                + cost["mini_output_tokens"] / 1e6 * GPT54_MINI_OUTPUT_PER_M
-            )
-            total_full_cost += (
-                cost["full_input_tokens"] / 1e6 * price_per_1m_input
-                + cost["full_output_tokens"] / 1e6 * price_per_1m_output
-            )
-        total = total_mini_cost + total_full_cost
-        return {
-            "total_cost": total,
-            "mini_cost": total_mini_cost,
-            "full_cost": total_full_cost,
-            "n": len(results),
-            "cost_per_example": total / len(results) if results else 0,
-        }
-
-    total_input = 0
-    total_output = 0
-    for r in results:
-        cost = r.get("cost", {})
-        total_input += cost.get("input_tokens", 0)
-        total_output += cost.get("output_tokens", 0)
-
-    input_cost = total_input / 1e6 * price_per_1m_input
-    output_cost = total_output / 1e6 * price_per_1m_output
-    total = input_cost + output_cost
-
-    return {
-        "total_cost": total,
-        "input_cost": input_cost,
-        "output_cost": output_cost,
-        "total_input_tokens": total_input,
-        "total_output_tokens": total_output,
-        "n": len(results),
-        "cost_per_example": total / len(results) if results else 0,
-    }
-
-
-def detect_file_type(filename: str) -> str:
-    """Detect experiment type from filename."""
-    name = Path(filename).name
-    for prefix in [
-        "combined",
-        "baseline",
-        "criteria",
-        "calibration",
-        "ensemble",
-        "escalation",
-    ]:
-        if name.startswith(prefix):
-            return prefix
-    return "unknown"
+# ===================================================================
+# Main: derive all conditions from collections
+# ===================================================================
 
 
 def main():
-    results_dir = Path("results/raw")
-    tables_dir = Path("results/tables")
-    tables_dir.mkdir(parents=True, exist_ok=True)
-
-    if not results_dir.exists():
-        print(
-            "ERROR: results/raw/ directory not found. Run from experiments/llm-judge-ablations/"
-        )
-        sys.exit(1)
-
-    jsonl_files = sorted(results_dir.glob("*.jsonl"))
-    if not jsonl_files:
-        print("No JSONL files found in results/raw/")
+    TABLES_DIR.mkdir(parents=True, exist_ok=True)
+    if not RAW_DIR.exists():
+        print("ERROR: results/raw/ not found")
         sys.exit(1)
 
     all_metrics = {}
 
-    for filepath in jsonl_files:
-        file_type = detect_file_type(filepath.name)
-        key = filepath.stem
-        print(f"\n{'='*60}")
-        print(f"Processing: {filepath.name} (type: {file_type})")
-        print(f"{'='*60}")
+    # --- Load available collections ---
+    collections: dict[str, list[dict]] = {}
+    for f in sorted(RAW_DIR.glob("*.jsonl")):
+        key = f.stem
+        data = load_collection(f)
+        if data:
+            collections[key] = data
+            print(f"Loaded {key}: {len(data)} examples")
 
-        results = load_results(filepath)
-        print(f"  Loaded {len(results)} examples (refused filtered out)")
+    if not collections:
+        print("No collection files found")
+        sys.exit(1)
 
-        if not results:
-            print("  No valid results, skipping.")
-            continue
+    # --- Find collections ---
+    def _find(prefix: str) -> tuple[str, list[dict]] | None:
+        for key, data in collections.items():
+            if key.startswith(prefix):
+                return key, data
+        return None
 
-        metrics = {"file": filepath.name, "type": file_type, "n": len(results)}
+    base = _find("base_both")
+    criteria = _find("criteria_both")
+    cal_low = _find("cal-low_both")
+    cal_high = _find("cal-high_both")
+    cal_both = _find("cal-both_both")
+    cal_cross = _find("cal-cross_both")
+    combined = _find("combined_both")
 
-        # Accuracy — escalation/combined use full_scores instead of all_scores
-        if file_type in ("escalation", "combined"):
-            acc_results = [
-                {"id": r["id"], "subset": r["subset"], "all_scores": r["full_scores"]}
-                for r in results
-            ]
-            acc = compute_accuracy(acc_results)
-        else:
-            acc = compute_accuracy(results)
-        metrics["accuracy"] = acc
-        print(
-            f"\n  Overall accuracy: {acc['overall']:.3f} ({acc['n_correct']}/{acc['n']})"
-        )
-        print(f"  Tied: {acc['n_tied']}")
-        for subset, sub_acc in sorted(acc["by_subset"].items()):
-            print(
-                f"    {subset}: {sub_acc['accuracy']:.3f} ({sub_acc['n_correct']}/{sub_acc['n']}, tied={sub_acc['n_tied']})"
-            )
+    # Temperature sweep files (new format only)
+    temp_files = {}
+    for f in sorted(RAW_DIR.glob("base_full_k8_t*.jsonl")):
+        temp_files[f.stem] = load_collection(f)
 
-        # Cost
-        cost = compute_cost(results)
-        metrics["cost"] = cost
-        print(
-            f"\n  Cost: ${cost['total_cost']:.4f} (${cost['cost_per_example']:.6f}/example)"
-        )
+    # --- Intersection of IDs across main collections ---
+    main_collections = {}
+    for name, found in [("base", base), ("criteria", criteria), ("cal_low", cal_low),
+                        ("combined", combined)]:
+        if found:
+            main_collections[name] = found[1]
+    shared_ids = intersect_collections(main_collections) if main_collections else set()
+    print(f"\nShared IDs across main collections: {len(shared_ids)}")
 
-        # Type-specific metrics
-        if file_type == "ensemble":
-            # Variance metrics
-            var_metrics = compute_variance_metrics(results)
-            metrics["variance"] = var_metrics
-            print(f"\n  Mean score std: {var_metrics['mean_score_std']:.3f}")
-            print(
-                f"  Variance-correctness correlation: {var_metrics['variance_correctness_correlation']}"
-            )
-            for subset, sub_var in sorted(var_metrics["by_subset"].items()):
-                print(
-                    f"    {subset}: std={sub_var['mean_std']:.3f} (correct={sub_var['std_when_correct']:.3f}, incorrect={sub_var['std_when_incorrect']:.3f})"
-                )
+    # --- Helper: compute condition metrics ---
+    def _condition_metrics(
+        name: str, data: list[dict], model: str = "full", k: int | None = None,
+        use_intersection: bool = False,
+        deploy_models: str = "full", deploy_k: int = 1,
+    ) -> dict:
+        if use_intersection and shared_ids:
+            data = [r for r in data if r["id"] in shared_ids]
+        acc = compute_accuracy(data, model=model, k_subset=k)
+        ci = bootstrap_accuracy_ci(data, model=model, k_subset=k)
+        cost_per_ex = compute_deployment_cost(data, models=deploy_models, k=deploy_k)
+        return {
+            "name": name, "n": acc["n"],
+            "accuracy": acc, "accuracy_ci": ci,
+            "cost": {"cost_per_example": cost_per_ex},
+        }
 
-            # Diminishing returns
-            k_max = results[0]["k"] if results else 1
-            diminishing = {}
-            for k_sub in range(1, k_max + 1):
-                sub_acc = compute_accuracy(results, k_subset=k_sub)
-                diminishing[k_sub] = sub_acc
-            metrics["diminishing_returns"] = {
-                str(k): {
-                    "overall": v["overall"],
-                    "by_subset": {s: d["accuracy"] for s, d in v["by_subset"].items()},
+    # === Derive conditions ===
+
+    print(f"\n{'='*60}")
+    print("DERIVED CONDITIONS")
+    print(f"{'='*60}")
+
+    # 1. From base collection
+    if base:
+        key, data = base
+        m = _condition_metrics("Baseline (full k=1)", data, "full", k=1,
+                              deploy_models="full", deploy_k=1)
+        all_metrics["baseline"] = m
+        print(f"\n  Baseline: {m['accuracy']['overall']:.3f} "
+              f"[{m['accuracy_ci']['overall']['ci_low']:.3f}, {m['accuracy_ci']['overall']['ci_high']:.3f}]"
+              f"  n={m['n']}  ${m['cost']['cost_per_example']:.4f}/ex")
+
+        m = _condition_metrics("Ensemble full k=8", data, "full", k=8,
+                              deploy_models="full", deploy_k=8)
+        all_metrics["ensemble_k8"] = m
+        print(f"  Ensemble k=8: {m['accuracy']['overall']:.3f} "
+              f"[{m['accuracy_ci']['overall']['ci_low']:.3f}, {m['accuracy_ci']['overall']['ci_high']:.3f}]"
+              f"  ${m['cost']['cost_per_example']:.4f}/ex")
+
+        m = _condition_metrics("Mini k=8", data, "mini", k=8,
+                              deploy_models="mini", deploy_k=8)
+        all_metrics["mini_k8"] = m
+        print(f"  Mini k=8: {m['accuracy']['overall']:.3f} "
+              f"[{m['accuracy_ci']['overall']['ci_low']:.3f}, {m['accuracy_ci']['overall']['ci_high']:.3f}]"
+              f"  ${m['cost']['cost_per_example']:.4f}/ex")
+
+        m = _condition_metrics("Mini k=1", data, "mini", k=1,
+                              deploy_models="mini", deploy_k=1)
+        all_metrics["mini_k1"] = m
+        print(f"  Mini k=1: {m['accuracy']['overall']:.3f}")
+
+        # Diminishing returns
+        dim = {}
+        for k_sub in range(1, 9):
+            a = compute_accuracy(data, model="full", k_subset=k_sub)
+            dim[k_sub] = a["overall"]
+        all_metrics["diminishing_returns_full"] = dim
+        dim_mini = {}
+        for k_sub in range(1, 9):
+            a = compute_accuracy(data, model="mini", k_subset=k_sub)
+            dim_mini[k_sub] = a["overall"]
+        all_metrics["diminishing_returns_mini"] = dim_mini
+        print(f"  Diminishing returns (full): {' '.join(f'k={k}:{v:.3f}' for k, v in dim.items())}")
+
+        # Variance metrics
+        var = compute_variance_metrics(data, model="full")
+        all_metrics["variance_full"] = var
+        print(f"  Variance-correctness corr: {var['variance_correctness_correlation']}")
+
+        # Escalation (train/test split for optimised params)
+        if "mini_scores" in data[0]:
+            train, test = train_test_split(data)
+            print(f"\n  Escalation (train={len(train)}, test={len(test)}):")
+
+            esc = compute_escalation_metrics(data)
+            all_metrics["escalation_hard"] = esc
+
+            blend = optimise_blend(train, test)
+            all_metrics["blend_optimised"] = blend
+            print(f"    Soft blend: train={blend['train_accuracy']:.3f} test={blend['test_accuracy']:.3f} "
+                  f"midpoint={blend['best_midpoint']:.3f}")
+
+            vie = optimise_var_informed(train, test)
+            all_metrics["var_informed_optimised"] = vie
+            if vie["test_best"]:
+                print(f"    Var-informed best: test={vie['test_best']['accuracy']:.3f}")
+            if vie["test_best_constrained"]:
+                print(f"    Var-informed (<=2 calls): test={vie['test_best_constrained']['accuracy']:.3f}")
+
+            conv = compute_ensemble_convergence(data)
+            all_metrics["convergence"] = conv
+
+    # 2. From criteria collection
+    if criteria:
+        key, data = criteria
+        m = _condition_metrics("Criteria (full k=1)", data, "full", k=1,
+                              deploy_models="full", deploy_k=1)
+        all_metrics["criteria"] = m
+        print(f"\n  Criteria k=1: {m['accuracy']['overall']:.3f} "
+              f"[{m['accuracy_ci']['overall']['ci_low']:.3f}, {m['accuracy_ci']['overall']['ci_high']:.3f}]"
+              f"  ${m['cost']['cost_per_example']:.4f}/ex")
+
+        m = _condition_metrics("Criteria (full k=8)", data, "full", k=8,
+                              deploy_models="full", deploy_k=8)
+        all_metrics["criteria_k8"] = m
+        print(f"  Criteria k=8 (full): {m['accuracy']['overall']:.3f}"
+              f"  ${m['cost']['cost_per_example']:.4f}/ex")
+
+        m = _condition_metrics("Criteria (mini k=8)", data, "mini", k=8,
+                              deploy_models="mini", deploy_k=8)
+        all_metrics["criteria_mini_k8"] = m
+        print(f"  Criteria k=8 (mini): {m['accuracy']['overall']:.3f}"
+              f"  ${m['cost']['cost_per_example']:.4f}/ex")
+
+    # 3. From calibration collections
+    for cal_name, cal_found in [("cal_high", cal_high), ("cal_low", cal_low),
+                                 ("cal_both", cal_both), ("cal_cross", cal_cross)]:
+        if cal_found:
+            key, data = cal_found
+            label = cal_name.replace("cal_", "Calibration (") + ")"
+            # Cal cost includes the calibration scoring call (~1.5x baseline)
+            m = _condition_metrics(label, data, "full", k=1,
+                                  deploy_models="full", deploy_k=1)
+            all_metrics[cal_name] = m
+            print(f"\n  {label} k=1: {m['accuracy']['overall']:.3f} "
+                  f"[{m['accuracy_ci']['overall']['ci_low']:.3f}, {m['accuracy_ci']['overall']['ci_high']:.3f}]"
+                  f"  ${m['cost']['cost_per_example']:.4f}/ex")
+
+            m = _condition_metrics(label + " k=8", data, "full", k=8,
+                                  deploy_models="full", deploy_k=8)
+            all_metrics[cal_name + "_k8"] = m
+            print(f"  {label} k=8: {m['accuracy']['overall']:.3f}"
+                  f"  ${m['cost']['cost_per_example']:.4f}/ex")
+
+    # 4. From combined collection
+    if combined:
+        key, data = combined
+        m = _condition_metrics("Combined (full k=8)", data, "full", k=8,
+                              deploy_models="both", deploy_k=8)
+        all_metrics["combined"] = m
+        print(f"\n  Combined (full k=8): {m['accuracy']['overall']:.3f} "
+              f"[{m['accuracy_ci']['overall']['ci_low']:.3f}, {m['accuracy_ci']['overall']['ci_high']:.3f}]"
+              f"  ${m['cost']['cost_per_example']:.4f}/ex")
+
+        m = _condition_metrics("Combined (full k=1)", data, "full", k=1,
+                              deploy_models="both", deploy_k=1)
+        all_metrics["combined_k1"] = m
+        print(f"  Combined (full k=1): {m['accuracy']['overall']:.3f}")
+
+        if "mini_scores" in data[0]:
+            train, test = train_test_split(data)
+            blend = optimise_blend(train, test)
+            all_metrics["combined_blend"] = blend
+            print(f"  Combined + blend: train={blend['train_accuracy']:.3f} "
+                  f"test={blend['test_accuracy']:.3f}")
+
+    # 5. Temperature sweep
+    if temp_files:
+        print(f"\n  Temperature sweep:")
+        sweep = {}
+        for key, data in sorted(temp_files.items()):
+            for k_sub in [1, 8]:
+                acc = compute_accuracy(data, model="full", k_subset=k_sub)
+                ci = bootstrap_accuracy_ci(data, model="full", k_subset=k_sub)
+                sweep[f"{key}_k{k_sub}"] = {
+                    "accuracy": acc["overall"],
+                    "ci_low": ci["overall"]["ci_low"],
+                    "ci_high": ci["overall"]["ci_high"],
+                    "n": acc["n"],
                 }
-                for k, v in diminishing.items()
-            }
-            print(f"\n  Diminishing returns (accuracy by k):")
-            for k_sub in range(1, k_max + 1):
-                print(f"    k={k_sub}: {diminishing[k_sub]['overall']:.3f}")
-
-        elif file_type == "escalation":
-            # Per-response escalation (existing)
-            esc_metrics = compute_escalation_metrics(results)
-            metrics["escalation"] = esc_metrics
-            print(f"\n  Reference points:")
-            for ref_name, ref_acc in esc_metrics["reference"].items():
-                print(f"    {ref_name}: {ref_acc['overall']:.3f}")
-
-            print(f"\n  Per-response escalation (selected thresholds):")
-            for tr in esc_metrics["thresholds"][::5]:
-                print(
-                    f"    threshold={tr['threshold']:.2f}: acc={tr['accuracy']:.3f}, escalated={tr['pct_escalated']:.1%}, cost_ratio={tr['effective_cost_ratio']:.2f}"
-                )
-
-            # Soft blending
-            esc_blended = compute_escalation_metrics_blended(results)
-            metrics["escalation_blended"] = esc_blended
-            print(f"\n  Soft blending escalation (selected midpoints):")
-            for tr in esc_blended["thresholds"][::5]:
-                print(
-                    f"    midpoint={tr['threshold']:.2f}: acc={tr['accuracy']:.3f}, mean_weight={tr['mean_weight']:.3f}, cost_ratio={tr['effective_cost_ratio']:.2f}"
-                )
-
-            # Variance-informed ensembling
-            vie = compute_variance_informed_ensembling(results)
-            metrics["variance_informed_ensembling"] = vie
-            if vie["best"]:
-                b = vie["best"]
-                print(f"\n  Variance-informed ensembling (best):")
-                print(
-                    f"    σ1={b['sigma1']:.4f}, σ2={b['sigma2']:.4f}: acc={b['accuracy']:.3f}, mean_n2={b['mean_n2']:.1f}, cost_ratio={b['effective_cost_ratio']:.2f}"
-                )
-            if vie["best_cost_constrained"]:
-                b = vie["best_cost_constrained"]
-                print(f"  Best cost-constrained (mean_n2 ≤ 2.0):")
-                print(
-                    f"    σ1={b['sigma1']:.4f}, σ2={b['sigma2']:.4f}: acc={b['accuracy']:.3f}, mean_n2={b['mean_n2']:.1f}, cost_ratio={b['effective_cost_ratio']:.2f}"
-                )
-            print(f"\n  Fixed ensemble size reference:")
-            for entry in vie["by_n2"]:
-                print(f"    n2={entry['n2']}: {entry['accuracy']:.3f}")
-
-            conv = compute_ensemble_convergence(results)
-            metrics["convergence"] = conv
-            if conv["by_k"]:
-                print(f"\n  Mini-full convergence:")
-                for entry in conv["by_k"]:
-                    rc = (
-                        f"{entry['rank_correlation']:.3f}"
-                        if entry["rank_correlation"] is not None
-                        else "N/A"
-                    )
-                    print(
-                        f"    k={entry['k']}: agreement={entry['agreement_with_full']:.3f}, rank_corr={rc}"
-                    )
-
-        elif file_type == "combined":
-            # Combined = escalation format + criteria + calibration
-            # Run all the same analyses as escalation
-            esc_metrics = compute_escalation_metrics(results)
-            metrics["escalation"] = esc_metrics
-            print(f"\n  Reference points:")
-            for ref_name, ref_acc in esc_metrics["reference"].items():
-                print(f"    {ref_name}: {ref_acc['overall']:.3f}")
-
-            esc_blended = compute_escalation_metrics_blended(results)
-            metrics["escalation_blended"] = esc_blended
-            if esc_blended.get("thresholds"):
-                best_blend = max(esc_blended["thresholds"], key=lambda t: t["accuracy"])
-                print(
-                    f"\n  Best soft blend: acc={best_blend['accuracy']:.3f}, cost_ratio={best_blend['effective_cost_ratio']:.2f}"
-                )
-
-            vie = compute_variance_informed_ensembling(results)
-            metrics["variance_informed_ensembling"] = vie
-            if vie["best"]:
-                b = vie["best"]
-                print(
-                    f"\n  Best var-informed: acc={b['accuracy']:.3f}, mean_n2={b['mean_n2']:.1f}"
-                )
-
-            # Diminishing returns for both models
-            k_max = results[0].get("full_n", 8) if results else 8
-            diminishing = {}
-            for k_sub in range(1, k_max + 1):
-                adapted = [
-                    {
-                        "id": r["id"],
-                        "subset": r["subset"],
-                        "all_scores": r["full_scores"],
-                    }
-                    for r in results
-                ]
-                sub_acc = compute_accuracy(adapted, k_subset=k_sub)
-                diminishing[k_sub] = sub_acc
-            metrics["diminishing_returns"] = {
-                str(k): {
-                    "overall": v["overall"],
-                    "by_subset": {s: d["accuracy"] for s, d in v["by_subset"].items()},
+                print(f"    {key} k={k_sub}: {acc['overall']:.3f} "
+                      f"[{ci['overall']['ci_low']:.3f}, {ci['overall']['ci_high']:.3f}]")
+        # Add the base temp=1.0 data for completeness
+        if base:
+            for k_sub in [1, 8]:
+                acc = compute_accuracy(base[1], model="full", k_subset=k_sub)
+                ci = bootstrap_accuracy_ci(base[1], model="full", k_subset=k_sub)
+                sweep[f"base_full_k8_t1.0_k{k_sub}"] = {
+                    "accuracy": acc["overall"],
+                    "ci_low": ci["overall"]["ci_low"],
+                    "ci_high": ci["overall"]["ci_high"],
+                    "n": acc["n"],
                 }
-                for k, v in diminishing.items()
-            }
-            print(f"\n  Diminishing returns (full model, accuracy by k):")
-            for k_sub in range(1, k_max + 1):
-                print(f"    k={k_sub}: {diminishing[k_sub]['overall']:.3f}")
+        all_metrics["temperature_sweep"] = sweep
 
-            conv = compute_ensemble_convergence(results)
-            metrics["convergence"] = conv
+    # 6. Intersection analysis
+    if shared_ids and base and criteria:
+        print(f"\n  Intersection analysis (n={len(shared_ids)}):")
+        for name, found in [("baseline", base), ("criteria", criteria),
+                            ("cal_low", cal_low), ("combined", combined)]:
+            if found:
+                _, data = found
+                m = _condition_metrics(name, data, "full", k=1, use_intersection=True)
+                print(f"    {name}: {m['accuracy']['overall']:.3f} (n={m['n']})")
+                all_metrics[f"intersection_{name}"] = m
 
-        all_metrics[key] = metrics
-
-    # Save all metrics
-    output_path = tables_dir / "all_metrics.json"
-    with open(output_path, "w") as f:
-        json.dump(all_metrics, f, indent=2)
-    print(f"\n\nAll metrics saved to {output_path}")
+    # --- Save ---
+    output = TABLES_DIR / "all_metrics.json"
+    with open(output, "w") as f:
+        json.dump(all_metrics, f, indent=2, default=str)
+    print(f"\n\nSaved to {output}")
 
 
 if __name__ == "__main__":
