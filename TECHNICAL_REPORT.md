@@ -64,7 +64,7 @@ All experiments use temperature 1.0, `reasoning_effort="none"`, and a maximum of
 
 **Reasoning effort.** We set `reasoning_effort="none"` for all conditions to isolate prompt-level and aggregation effects. This parameter is held constant across all conditions, so it does not bias comparisons. Note that enabling reasoning may improve absolute accuracy for all conditions; we leave this ablation to future work.
 
-Ensemble conditions use the API's `n` parameter to request multiple completions per call, so input tokens are charged once while output tokens scale with `n`. Costs are computed from actual token usage as reported by the API and reported as mean USD per example, where "per example" reflects the total cost of determining a winner for one RB2 question — including all response scorings, ensemble calls, calibration overhead, and any dual-model calls required by that condition.
+Ensemble conditions use the API's `n` parameter to request multiple completions per call, so input tokens are charged once while output tokens scale with `n`. Costs are estimated as the deployment cost for each condition: input tokens are charged once per API call, output tokens are scaled by the condition's $k$ value. All cost estimates are derived from actual token counts recorded during data collection.
 
 ### 2.4 Base Prompt
 
@@ -300,7 +300,7 @@ Parameters $(\sigma_1, \sigma_2)$ are found by grid search over the 15th–95th 
 The **budget-constrained** variant restricts mean $n_{\text{full}} \leq 2.0$, achieving 74.9% on the test set at 1.6× baseline cost. This is barely above the baseline (71.7%) and far below mini k=8 (79.2% at 0.4× cost), suggesting that **variance-informed routing does not improve on simpler approaches at comparable cost**.
 
 ![Variance-Informed Ensembling](figures/variance_informed_ensembling.png)
-*Figure 6: Pareto frontier for per-response variance-informed ensembling (black) vs fixed-k full model (blue). Each gray point is a grid search configuration $(\sigma_1, \sigma_2)$. The Pareto frontier lies above the fixed-k line at low-to-medium cost, showing that adaptive routing extracts more accuracy per dollar than naively reducing k. At very low cost ratios, fixed k=1 full is competitive because variance-informed routing always incurs a fixed overhead from running mini n=8 first — the variance signal must pay for itself before adaptive allocation becomes worthwhile. The budget-constrained optimum (green star, 75.4% at 0.30× cost) and best overall (red star, 81.3% at 0.84× cost) are highlighted.*
+*Figure 6: Pareto frontier for per-response variance-informed ensembling (black) vs fixed-k full model (blue). Each gray point is a grid search configuration $(\sigma_1, \sigma_2)$. The budget-constrained optimum (green star, 74.9% test-set accuracy) and best overall (red star, 81.0% test-set) are highlighted.*
 
 **Summary of escalation strategies** (costs relative to k=1 full model baseline at $0.0133/example):
 
@@ -309,7 +309,7 @@ The **budget-constrained** variant restricts mean $n_{\text{full}} \leq 2.0$, ac
 | k=1 full (baseline) | 71.7% | $0.0133 | 1.0× |
 | Full model k=8 | 81.5% | $0.0663 | 5.0× |
 | Soft blend (full dataset) | 83.2% | $0.0714 | 5.4× |
-| **Soft blend (test set)** | **80.2%** | $0.0714 | 5.4× |
+| Soft blend (test set) | 80.2% | $0.0714 | 5.4× |
 | Var-informed (≤2 calls, test set) | 74.9% | ~$0.022 | 1.6× |
 
 Soft blending achieves 83.2% on the full dataset (80.2% on a held-out 20% test set) at the same cost as full model k=8 ($0.0714/example, 5.4×).
@@ -410,9 +410,9 @@ To understand the relationship more precisely, we measure how quickly mini's win
 ![Mini-Full Convergence](figures/mini_full_convergence.png)
 *Figure 9: Mini-full model agreement and Spearman rank correlation as a function of mini ensemble size. Both plateau by k=3–5.*
 
-Agreement plateaus at ~80% by $k=3–5$. The ceiling is not a data limitation — it reflects genuine systematic disagreement between the two models on ~20% of examples. No amount of additional mini calls resolves this, which motivates the blending approach in Section 3.5.2: rather than treating mini as a noisy approximation to full, we treat them as complementary estimators with partially independent biases.
+Agreement approaches 80% by $k=3–5$. The ceiling is not a data limitation — it reflects genuine systematic disagreement between the two models on ~20% of examples. No amount of additional mini calls resolves this, which motivates the blending approach in Section 3.5.2: rather than treating mini as a noisy approximation to full, we treat them as complementary estimators with partially independent biases.
 
-### 5.4 Soft Blending vs Hard Escalation
+### 5.4 Soft Blending
 
 On the full dataset (in-sample), soft blending (83.2%) outperforms full model k=8 (81.5%), consistent with the hypothesis that combining two imperfectly correlated estimators reduces variance. However, on the held-out test set, base soft blend (80.2%) does not beat full k=8 (81.5%), suggesting the in-sample gain is partly due to midpoint overfitting. The benefit is more robust when combined with prompt improvements: combined+blend (84.8% test) does outperform combined full k=8 (82.6%), indicating that blending is most valuable when both models have richer scoring signals from criteria and calibration context.
 
@@ -449,9 +449,10 @@ All experiments were conducted via Azure OpenAI API version `2025-04-01-preview`
 
 ### Future Work
 
-- **Cross-model evaluation**: does soft blending still outperform hard escalation with other model pairs (e.g., Claude, Gemini)?
+- **Cross-model generalisation**: do criteria + ensembling provide similar gains with other judge models (e.g., Claude, Gemini, open-weight models)?
 - **Reasoning effort ablation**: testing `reasoning_effort` at "low", "medium", and "high" to quantify its impact on both baseline and ensemble accuracy.
-- **Reduced-cost soft blending**: soft blending currently requires both mini k=8 and full k=8. Given the diminishing returns observed in Section 3.2, a blend using smaller ensemble sizes (e.g. k=3 mini + k=3 full) may preserve most of the accuracy gain at substantially lower cost.
+- **Long-context scaling**: RB2 examples average ~576 tokens. It is unclear whether ensembling and criteria injection remain effective for multi-turn conversations or document-length responses, where scoring behaviour and cost profiles may differ substantially.
+- **Criteria design sensitivity**: we used a single pre-registered criterion per category. Systematic variation of criterion wording, specificity, and number of criteria could reveal how robust the +2.1pp k=8 gain is to prompt engineering choices.
 - **Extension to pairwise ranking tasks** (not just rating), where ensemble aggregation requires rank aggregation methods.
 
 ---
@@ -471,7 +472,7 @@ Three additional techniques we investigated did not reliably improve on criteria
 4. **Soft blending** (sigmoid-weighted combination of mini and full model scores) shows an in-sample accuracy gain that does not hold on a held-out test set (80.2% vs 81.5% for full k=8).
 5. **Combining all techniques** (criteria + calibration + dual-model ensembling) yields 82.6% — lower than criteria k=8 alone (83.6%) at higher cost.
 
-The practical recommendation for practitioners is simple: write a task-specific criterion and set k=3–8. None of these techniques require finetuning.
+The practical recommendation for practitioners is simple: write a task-specific criterion and set k=3–8. Neither requires finetuning — they are drop-in additions to any existing LLM judge pipeline.
 
 ---
 
