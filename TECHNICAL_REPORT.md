@@ -439,6 +439,10 @@ This suggests that for practitioners adopting LLM judges, the highest-value inte
 - We set `reasoning_effort="none"` for all conditions, which likely depresses absolute accuracy across the board. Since this is held constant, it does not affect relative comparisons between conditions, but readers should not compare our absolute numbers to published RB2 results that may use different reasoning settings.
 - We use per-response variance for all escalation strategies on principled grounds (each judge call is independent). However, the prior query-level approach (averaging variance across four responses) yielded slightly higher accuracy in some conditions, suggesting that the averaging may have acted as beneficial noise smoothing.
 
+### Reproducibility
+
+All experiments were conducted via Azure OpenAI API version `2025-04-01-preview` using GPT-5.4 and GPT-5.4 mini deployments. Data was collected in March–April 2026. All API calls use temperature 1.0 with no seed parameter, so individual scores are not deterministically reproducible; however, aggregate accuracy metrics are stable across runs (within the reported bootstrap confidence intervals). Total API spend across all collections and temperature sweeps was approximately $1,200. All collection scripts write results incrementally and support resume; the full dataset can be re-collected by running `bash run_all.sh`.
+
 ### Future Work
 
 - **Cross-model evaluation**: does soft blending still outperform hard escalation with other model pairs (e.g., Claude, Gemini)?
