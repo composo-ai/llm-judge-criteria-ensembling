@@ -39,6 +39,7 @@ COLORS = {
     "Mini k=8": "#CCB974",
     "Soft blend": "#E5AE38",
     "Combined": "#B07AA1",
+    "Criteria k=8": "#76B7B2",
     "Combined + blend": "#FF9DA7",
 }
 
@@ -74,17 +75,16 @@ def _find_collection(prefix: str) -> list[dict] | None:
 def plot_hero_accuracy(metrics):
     # Build {condition_name: {subset: accuracy}} from metrics
     conditions = {}
+    # Only full-dataset conditions (no test-set to avoid mixing evaluation protocols)
     display_order = [
         ("baseline", "Baseline"),
-        ("criteria", "Criteria"),
+        ("criteria", "Criteria (k=1)"),
         ("cal_low", "Calibration (low)"),
         ("ensemble_k8", "Ensemble k=8"),
         ("mini_k8", "Mini k=8"),
+        ("criteria_k8", "Criteria k=8"),
         ("combined", "Combined"),
     ]
-    # Add blend if available (use test accuracy)
-    blend = metrics.get("blend_optimised")
-    combined_blend = metrics.get("combined_blend")
 
     for key, label in display_order:
         m = metrics.get(key)
@@ -93,15 +93,6 @@ def plot_hero_accuracy(metrics):
                 sub: d["accuracy"]
                 for sub, d in m["accuracy"]["by_subset"].items()
             }
-
-    if blend and "test_by_subset" in blend:
-        conditions["Soft blend"] = {
-            sub: d["accuracy"] for sub, d in blend["test_by_subset"].items()
-        }
-    if combined_blend and "test_by_subset" in combined_blend:
-        conditions["Combined + blend"] = {
-            sub: d["accuracy"] for sub, d in combined_blend["test_by_subset"].items()
-        }
 
     if not conditions:
         print("  Skipping hero figure: no data")
@@ -139,29 +130,15 @@ def plot_hero_accuracy(metrics):
 def plot_pareto_frontier(metrics):
     points = []  # (cost_per_ex, accuracy, label)
 
-    for key, label in [("baseline", "Baseline"), ("criteria", "Criteria"),
+    # Only full-dataset conditions (no test-set numbers to avoid mixing protocols)
+    for key, label in [("baseline", "Baseline"), ("criteria", "Criteria (k=1)"),
+                       ("criteria_k8", "Criteria k=8"),
                        ("ensemble_k8", "Ensemble k=8"), ("mini_k8", "Mini k=8"),
-                       ("cal_low", "Calibration (low)"), ("cal_high", "Calibration (high)"),
+                       ("cal_low", "Calibration (low)"),
                        ("combined", "Combined")]:
         m = metrics.get(key)
         if m and "accuracy" in m and "cost" in m:
             points.append((m["cost"]["cost_per_example"], m["accuracy"]["overall"], label))
-
-    blend = metrics.get("blend_optimised")
-    if blend:
-        # Blend has same cost as running both models
-        base_m = metrics.get("baseline")
-        if base_m:
-            # Approximate: both models cost
-            both_cost = base_m["cost"]["cost_per_example"] * 5.4  # ~5.4x baseline
-            points.append((both_cost, blend["test_accuracy"], "Soft blend"))
-
-    combined_blend = metrics.get("combined_blend")
-    if combined_blend:
-        comb_m = metrics.get("combined")
-        if comb_m:
-            points.append((comb_m["cost"]["cost_per_example"], combined_blend["test_accuracy"],
-                          "Combined + blend"))
 
     if not points:
         print("  Skipping Pareto: no data")

@@ -60,7 +60,7 @@ When running both a mini and a full model (Sections 3.5–3.6), we write $\bar{s
 
 All experiments use temperature 1.0, `reasoning_effort="none"`, and a maximum of 4,096 output tokens per completion.
 
-**Temperature.** We use temperature 1.0 to enable score diversity across ensemble calls. A temperature sweep (Section 5.5) confirms that temperature does not significantly affect k=1 baseline accuracy but is necessary for ensemble diversity — at temperature 0, all k completions are near-identical and ensembling provides no benefit.
+**Temperature.** We use temperature 1.0 to maximise score diversity across ensemble calls. A temperature sweep (Section 5.5) confirms that temperature does not significantly affect k=1 baseline accuracy. Ensembling helps at all temperatures, but the gain increases with temperature (from +4.6pp at temp=0 to +9.8pp at temp=1.0).
 
 **Reasoning effort.** We set `reasoning_effort="none"` for all conditions to isolate prompt-level and aggregation effects. This parameter is held constant across all conditions, so it does not bias comparisons. Note that enabling reasoning may improve absolute accuracy for all conditions; we leave this ablation to future work.
 
@@ -238,14 +238,14 @@ We test four variants:
 
 **Variance as an error signal.** Each response's score variance $\sigma_i = \text{std}(s_{i,1}, \ldots, s_{i,k})$ (as defined in Section 2.2) serves as the routing signal. Since each judge call is independent, all escalation strategies operate at the per-response level — each response's own variance determines how it is scored, rather than averaging variance across the four responses.
 
-Pearson correlation between per-response variance and correctness (binary) is $r = -0.15$: high variance responses are more likely to be judged incorrectly. Mini and full model variances are positively correlated ($r = 0.272$), validating mini variance as a proxy for full model uncertainty.
+Pearson correlation between per-response variance and correctness (binary) is $r = -0.13$: high variance responses are slightly more likely to be judged incorrectly. Mini and full model variances are positively correlated ($r = 0.411$), validating mini variance as a proxy for full model uncertainty.
 
 ![Variance Error Signal](figures/variance_error_signal.png)
 *Figure 2: Distribution of ensemble score variance for correct vs incorrect judgments. Incorrect judgments exhibit higher variance, validating variance as an error signal.*
 
 
 ![Variance Correlation](figures/variance_correlation.png)
-*Figure 3: Mini model score variance vs full model score variance (chosen response). Pearson r = 0.272. Mini variance is a useful but imperfect proxy for full model uncertainty. The grid structure arises because scores are integers (1–10), so variance over k=8 draws can only take a discrete set of values.*
+*Figure 3: Mini model score variance vs full model score variance (chosen response). Pearson r = 0.411. Mini variance is a useful but imperfect proxy for full model uncertainty. The grid structure arises because scores are integers (1–10), so variance over k=8 draws can only take a discrete set of values.*
 
 
 We evaluate four escalation strategies offline on the collected data.
@@ -278,7 +278,7 @@ where $j \in \{1, \ldots, k\}$ indexes the independent calls. As $k \to \infty$,
 
 $$\text{Var}((1-w)\bar{s}_i^{\text{mini}} + w\bar{s}_i^{\text{full}}) = (1-w)^2\sigma_{\text{mini}}^2 + w^2\sigma_{\text{full}}^2 + 2w(1-w)\rho\,\sigma_{\text{mini}}\sigma_{\text{full}}$$
 
-When $\rho < 1$, there exists a $w^*$ where this is strictly less than both $\sigma_{\text{mini}}^2$ and $\sigma_{\text{full}}^2$. We confirm empirically that mini and full model score variances are imperfectly correlated ($\rho = 0.272$, Section 3.5), and hypothesise that this variance reduction translates to more reliable ranking of responses, explaining why soft blending outperforms full model k=8 in our experiments.
+When $\rho < 1$, there exists a $w^*$ where this is strictly less than both $\sigma_{\text{mini}}^2$ and $\sigma_{\text{full}}^2$. We confirm empirically that mini and full model score variances are imperfectly correlated ($\rho = 0.411$, Section 3.5), and hypothesise that this variance reduction translates to more reliable ranking of responses. On the full dataset, soft blending (83.2%) outperforms full model k=8 (81.5%), though this advantage does not hold on the test set (see Section 5.4).
 
 **Method.** Rather than hard escalation, we blend mini and full model scores continuously using a per-response sigmoid weight:
 
@@ -291,7 +291,7 @@ Each response's own variance $\sigma_i$ determines its blend weight independentl
 > **Note on cost.** Soft blending always runs all mini and full model calls, so its cost is the same as running both models ($0.0715/example, 5.4× baseline). The accuracy gain over full model k=8 comes at no additional cost beyond the mini model overhead. A natural extension would be to reduce ensemble size for both models (e.g. k=3 mini + k=3 full) and re-evaluate: given the diminishing returns observed in Section 3.2, it is plausible that much of the soft blend accuracy gain is preserved at substantially lower cost.
 
 ![Soft Blending](figures/soft_blending.png)
-*Figure 5: Per-response soft blending accuracy vs mean blend weight $w$. The optimal midpoint achieves 83.2% on the full dataset at a mean blend weight of ~0.65. Accuracy degrades on both sides: too low $w$ relies too heavily on the mini model; too high $w$ discards the useful mini signal.*
+*Figure 5: Per-response soft blending accuracy vs mean blend weight $w$ (full dataset, in-sample). Accuracy increases monotonically with $w$, peaking at 83.2% near $w = 0.91$ (mostly full model). On a held-out test set, the blend (80.2%) does not beat full model k=8 (81.5%), suggesting the in-sample gain is partly due to midpoint overfitting (see Section 5.4).*
 
 #### 3.5.3 Variance-Informed Ensembling
 
@@ -362,7 +362,7 @@ The calibration "low" variant is used as default (slightly best-performing in is
 ### 4.2 Cost–Accuracy Pareto Frontier
 
 ![Pareto Frontier](figures/pareto_frontier.png)
-*Figure 8: Cost vs accuracy Pareto frontier. Calibration variants are shown as a single representative point (best accuracy). Combined + soft blend Pareto-dominates all other points. Criteria injection lies on the Pareto frontier at near-baseline cost — the best cost-efficiency of any technique.*
+*Figure 8: Cost vs accuracy Pareto frontier (full-dataset conditions only). Criteria k=8 Pareto-dominates all other high-accuracy conditions — achieving 83.6% at 5.3× baseline cost, beating Combined (82.6% at 6.0×). Mini k=8 dominates the low-cost frontier at 0.4× baseline cost.*
 
 ---
 
@@ -414,12 +414,12 @@ On the full dataset (in-sample), soft blending (83.2%) outperforms full model k=
 
 ### 5.5 Temperature Sensitivity
 
-We sweep temperature across {0.0, 0.3, 0.7, 1.0} for the base prompt with the full model. At k=1 (single call), accuracy is relatively stable across temperatures — the judge produces similar-quality scores regardless of sampling temperature. At k=8 (ensemble), lower temperatures yield diminishing returns from ensembling because completions are near-identical: at temperature 0, all 8 completions produce the same score, making the ensemble equivalent to k=1.
+We sweep temperature across {0.0, 0.3, 0.7, 1.0} for the base prompt with the full model. At k=1, accuracy is stable across temperatures (71–73%, CIs overlapping). At k=8, ensembling helps at all temperatures, but the gain increases with temperature: from +4.6pp at temperature 0 (72.5% → 77.1%) to +9.8pp at temperature 1.0 (71.7% → 81.5%). Even at temperature 0, the 8 completions are not fully identical — the model retains enough stochasticity for ensembling to provide meaningful variance reduction.
 
-This confirms that temperature > 0 is necessary for ensemble diversity to provide accuracy gains. Our choice of temperature 1.0 maximises this diversity.
+Temperature 1.0 maximises ensemble diversity and the resulting accuracy gain, which is why we use it for all conditions. The k=1 baseline is not meaningfully affected by this choice.
 
 ![Temperature Sweep](figures/temperature_sweep.png)
-*Figure 10: Baseline accuracy vs temperature for k=1 and k=8. k=1 accuracy is stable across temperatures; k=8 accuracy degrades at low temperatures as ensemble diversity vanishes.*
+*Figure 10: Baseline accuracy vs temperature for k=1 and k=8 with 95% bootstrap CIs. k=1 accuracy is stable across temperatures. k=8 ensembling helps at all temperatures but the gain increases with temperature (from +4.6pp at temp=0 to +9.8pp at temp=1.0).*
 
 ### 5.6 Criteria + Ensembling as a Simple Strong Baseline
 
