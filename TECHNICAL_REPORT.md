@@ -438,10 +438,10 @@ This suggests that for practitioners adopting LLM judges, the highest-value inte
 ### Limitations
 
 - All experiments use a single judge model family (GPT-5.4). Generalisability to other models (e.g., Claude, Gemini) is untested.
-- RewardBench 2 is a single benchmark. Performance may differ on in-distribution reward modelling tasks in production RLHF pipelines.
+- RewardBench 2 is a single benchmark. Performance may differ on production LLM judge tasks, including offline evaluation suites and real-time monitoring systems.
 - Soft blend parameters (steepness, midpoint) and variance-informed ensembling parameters ($\sigma_1$, $\sigma_2$) are optimised on a training split (80% of data) and evaluated on a held-out test split (20%). We report test-set accuracies with bootstrap confidence intervals. The full-dataset numbers reported in Section 4 are provided for comparison but should be treated as optimistic upper bounds for these parameter-optimised conditions.
 - We set `reasoning_effort="none"` for all conditions, which likely depresses absolute accuracy across the board. Since this is held constant, it does not affect relative comparisons between conditions, but readers should not compare our absolute numbers to published RB2 results that may use different reasoning settings.
-- We use per-response variance for all escalation strategies on principled grounds (each judge call is independent). However, the prior query-level approach (averaging variance across four responses) yielded slightly higher accuracy in some conditions, suggesting that the averaging may have acted as beneficial noise smoothing.
+- RewardBench 2 examples are short: the average scoring call uses ~576 input tokens (prompt + response combined). It is unknown how these techniques — particularly ensembling and calibration context — scale to longer contexts (e.g., multi-turn conversations or document-length responses) where token costs are higher and scoring behaviour may differ.
 
 ### Reproducibility
 
