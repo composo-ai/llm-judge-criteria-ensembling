@@ -3,7 +3,7 @@
 **Author:** Ryan Lail<br>
 **Affiliation:** Composo AI
 
-Systematic study testing practical techniques to improve LLM-as-judge accuracy on [RewardBench 2](https://huggingface.co/datasets/allenai/reward-bench-2) (ratings mode). See [TECHNICAL_REPORT.md](TECHNICAL_REPORT.md) for full methodology, mathematical derivations, and analysis.
+Systematic evaluation of five candidate techniques for improving LLM-as-judge accuracy on [RewardBench 2](https://huggingface.co/datasets/allenai/reward-bench-2) (ratings mode). **Key finding:** a one-sentence task-specific criterion with k=8 ensembling reaches 83.6% — the best result at its cost level. Three additional techniques (calibration, model routing, soft blending) did not reliably improve on this. See [TECHNICAL_REPORT.md](TECHNICAL_REPORT.md) for full methodology and analysis.
 
 ## Setup
 
