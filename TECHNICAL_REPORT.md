@@ -453,6 +453,7 @@ All experiments were conducted via Azure OpenAI API version `2025-04-01-preview`
 - **Reasoning effort ablation**: testing `reasoning_effort` at "low", "medium", and "high" to quantify its impact on both baseline and ensemble accuracy.
 - **Long-context scaling**: RB2 examples average ~576 tokens. It is unclear whether ensembling and criteria injection remain effective for multi-turn conversations or document-length responses, where scoring behaviour and cost profiles may differ substantially.
 - **Criteria design sensitivity**: we used a single pre-registered criterion per category. Systematic variation of criterion wording, specificity, and number of criteria could reveal how robust the +2.1pp k=8 gain is to prompt engineering choices.
+- **Cheaper model tiers**: GPT-5.4 mini with criteria k=8 already matches the full model base ensemble (81.5%) at 0.4× cost. Even cheaper models (e.g., GPT nano-class) could push the cost floor further while retaining much of the accuracy if criteria + ensembling provide similar relative gains.
 - **Extension to pairwise ranking tasks** (not just rating), where ensemble aggregation requires rank aggregation methods.
 
 ---
