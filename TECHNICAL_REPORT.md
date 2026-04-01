@@ -113,7 +113,7 @@ The baseline condition applies the RB2 prompt verbatim with $k=1$ completion per
 
 $$\hat{y} = \underset{i}{\arg\max}\; \bar{s}_i, \quad \bar{s}_i = \frac{1}{k}\sum_{j=1}^{k} s_{ij}$$
 
-This reduces the tie rate dramatically (354 → 73), since ties require *all* response means to be exactly equal across $k$ draws.
+This reduces the tie rate dramatically (353 → 77), since ties require *all* response means to be exactly equal across $k$ draws.
 
 **Diminishing returns.** We analyse accuracy as a function of $k$ by subsampling the first $k$ scores from our $k=8$ results without rerunning the experiment:
 
@@ -134,7 +134,7 @@ Most of the gain is captured by $k=3$. Returns are marginal beyond $k=5$.
 *Figure 1: Accuracy vs ensemble size k for full (GPT-5.4) and mini (GPT-5.4 mini) models. Most gain is captured by k=3.*
 
 
-**Result**: 81.5% (±1.8pp) (+9.8pp over baseline), $0.0667/example (5.0× baseline cost).
+**Result**: 81.5% (±1.8pp) (+9.8pp over baseline), $0.0663/example (5.0× baseline cost).
 
 ### 3.3 Task-Specific Criteria
 
@@ -312,7 +312,7 @@ The **budget-constrained** variant restricts mean $n_{\text{full}} \leq 2.0$, ac
 | **Soft blend (test set)** | **80.2%** | $0.0714 | 5.4× |
 | Var-informed (≤2 calls, test set) | 74.9% | ~$0.022 | 1.6× |
 
-Soft blending achieves 83.2% on the full dataset (80.2% on a held-out 20% test set) at the same cost as full model k=8 ($0.0714/example, 5.3×).
+Soft blending achieves 83.2% on the full dataset (80.2% on a held-out 20% test set) at the same cost as full model k=8 ($0.0714/example, 5.4×).
 
 ### 3.6 Combined Condition
 
@@ -341,7 +341,7 @@ The calibration "low" variant is used as default (slightly best-performing in is
 | Ensemble (full k=8) | 1730 | 81.5% (±1.8pp) | 86.7% | 81.8% | 74.9% | 44.7% | 92.1% | $0.0663 | 5.0× |
 | **Criteria (full k=8)** | 1741 | **83.6%** (±1.6pp) | **89.1%** | **82.8%** | **79.2%** | 48.8% | **93.2%** | $0.0702 | 5.3× |
 | Mini model k=8 | 1730 | 79.2% (±1.9pp) | 83.3% | 80.2% | 68.3% | 40.3% | 92.8% | $0.0051 | 0.4× |
-| Criteria (mini k=8) | 1741 | 81.5% (±1.7pp) | — | — | — | — | — | $0.0054 | 0.4× |
+| Criteria (mini k=8) | 1741 | 81.5% (±1.7pp) | — | — | — | — | — | $0.0053 | 0.4× |
 
 **Investigated techniques (did not improve on criteria k=8):**
 
@@ -362,7 +362,7 @@ The calibration "low" variant is used as default (slightly best-performing in is
 > **†** Combined + blend produces the highest test-set number (84.8%) but should be interpreted with caution: the base soft blend failed to generalise (80.2% vs 81.5% for full k=8, Section 5.4), the test set is small (~349 examples), and the non-blended combined condition (82.6%) already underperforms criteria k=8 (83.6%).
 
 ![Hero Accuracy](figures/hero_accuracy.png)
-*Figure 7: Accuracy by condition and category. Criteria k=8 (83.6%) emerges as the most cost-effective high-accuracy condition — matching combined (82.6%) at 1.0× baseline cost. Precise IF remains the hardest category across all conditions.*
+*Figure 7: Accuracy by condition and category. Criteria k=8 (83.6%) outperforms combined (82.6%) at lower cost (5.3× vs 6.0× baseline). Precise IF remains the hardest category across all conditions.*
 
 ### 4.2 Cost–Accuracy Pareto Frontier
 
