@@ -354,10 +354,12 @@ The calibration "low" variant is used as default (slightly best-performing in is
 | Calibration cross (k=1) | 1745 | 72.4% (±2.1pp) | 77.0% | 68.2% | 68.0% | 30.6% | 89.1% | $0.0194 | 1.5× |
 | Combined (full k=8) | 1746 | 82.6% (±1.6pp) | 87.6% | 80.6% | 77.6% | **52.5%** | 92.8% | $0.0803 | 6.0× |
 | Soft blend (test) ‡ | ~343 | 80.2% | — | — | — | — | — | $0.0714 | 5.4× |
-| Combined + blend (test) ‡ | ~349 | 84.8% | — | — | — | — | — | $0.0803 | 6.0× |
+| Combined + blend (test) ‡† | ~349 | 84.8% | — | — | — | — | — | $0.0803 | 6.0× |
 | Var-informed (≤2 calls, test) ‡ | ~343 | 74.9% | — | — | — | — | — | ~$0.022 | 1.6× |
 
 > **Note on test-set evaluation (‡ rows):** Blend parameters are optimised on 80% of the data and evaluated on the remaining 20%. The test set is small (~340 examples), so per-subset breakdowns are omitted.
+>
+> **†** Combined + blend produces the highest test-set number (84.8%) but should be interpreted with caution: the base soft blend failed to generalise (80.2% vs 81.5% for full k=8, Section 5.4), the test set is small (~349 examples), and the non-blended combined condition (82.6%) already underperforms criteria k=8 (83.6%).
 
 ![Hero Accuracy](figures/hero_accuracy.png)
 *Figure 7: Accuracy by condition and category. Criteria k=8 (83.6%) emerges as the most cost-effective high-accuracy condition — matching combined (82.6%) at 1.0× baseline cost. Precise IF remains the hardest category across all conditions.*
