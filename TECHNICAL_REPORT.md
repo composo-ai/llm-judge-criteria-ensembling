@@ -49,6 +49,8 @@ Each example consists of a query $q$ and four candidate responses $r_0, r_1, r_2
 
 The predicted winner is the response with the strictly highest mean score. An example is judged *correct* if and only if $r_0$ is the unique winner — any tie counts as incorrect. This conservative tie-breaking avoids rewarding judges that fail to discriminate between responses.
 
+**Confidence intervals.** We report 95% confidence intervals using the nonparametric bootstrap. For each condition, we resample the $N$ examples with replacement 500 times, computing overall accuracy on each resample. The 2.5th and 97.5th percentiles of the resulting distribution form the 95% CI. This approach makes no distributional assumptions about accuracy and naturally accounts for per-subset variation, since each resample draws a different mix of easy and hard examples. Per-subset CIs are computed analogously within each bootstrap iteration. We report CIs as $\pm$ half-widths (e.g., ±2.0pp means the interval spans 4.0pp). Conditions that involve parameter optimisation (soft blending, variance-informed ensembling) are evaluated on a held-out 20% test split to avoid reporting in-sample CIs on tuned parameters.
+
 When running both a mini and a full model (Sections 3.5–3.6), we write $\bar{s}_i^{\text{mini}}$ and $\bar{s}_i^{\text{full}}$ for their respective mean scores. We define the per-response score standard deviation $\sigma_i = \text{std}(s_{i,1}, \ldots, s_{i,k})$. $C_{\text{mini}}$ and $C_{\text{full}}$ denote the total API cost of running all mini and full model calls on a given example.
 
 ### 2.3 Models and Costs
@@ -276,7 +278,7 @@ where $C_{\text{mini}}$ and $C_{\text{full}}$ are the fixed costs of running all
 
 **Method.** We blend mini and full model scores continuously using a per-response sigmoid weight:
 
-$$w_i(\sigma_i, m) = \text{sigmoid}\!\left(10 \cdot (\sigma_i - m)\right) = \frac{1}{1 + e^{-10(\sigma_i - m)}}$$
+$$w_i(\sigma_i, m) = \text{sigmoid}\left(10 \cdot (\sigma_i - m)\right) = \frac{1}{1 + e^{-10(\sigma_i - m)}}$$
 
 $$s_i^{\text{eff}} = (1 - w_i) \cdot \bar{s}_i^{\text{mini}} + w_i \cdot \bar{s}_i^{\text{full}}$$
 
@@ -300,7 +302,7 @@ Parameters $(\sigma_1, \sigma_2)$ are found by grid search over the 15th–95th 
 The **budget-constrained** variant restricts mean $n_{\text{full}} \leq 2.0$, achieving 74.9% on the test set at 1.6× baseline cost. This is barely above the baseline (71.7%) and far below mini k=8 (79.2% at 0.4× cost), suggesting that **variance-informed routing does not improve on simpler approaches at comparable cost**.
 
 ![Variance-Informed Ensembling](figures/variance_informed_ensembling.png)
-*Figure 6: Pareto frontier for per-response variance-informed ensembling (black) vs fixed-k full model (blue). Each gray point is a grid search configuration $(\sigma_1, \sigma_2)$. The budget-constrained optimum (green star, 74.9% test-set accuracy) and best overall (red star, 81.0% test-set) are highlighted.*
+*Figure 6: Pareto frontier for per-response variance-informed ensembling (black) vs fixed-k full model (blue). The frontier and gray grid points show train-set accuracy (80% of data); the two stars show test-set accuracy (held-out 20%) for the best overall (red, 81.0%) and budget-constrained (green, 74.9%) configurations. The stars fall below the frontier because they reflect out-of-sample performance.*
 
 **Summary of escalation strategies** (costs relative to k=1 full model baseline at $0.0133/example):
 
