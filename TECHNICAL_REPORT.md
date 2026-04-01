@@ -418,7 +418,7 @@ On the full dataset (in-sample), soft blending (83.2%) outperforms full model k=
 
 ### 5.5 Temperature Sensitivity
 
-We sweep temperature across {0.0, 0.3, 0.7, 1.0} for the base prompt with the full model. At k=1, accuracy is stable across temperatures (71–73%, CIs overlapping). At k=8, ensembling helps at all temperatures, but the gain increases with temperature: from +4.6pp at temperature 0 (72.5% → 77.1%) to +9.8pp at temperature 1.0 (71.7% → 81.5%). Even at temperature 0, the 8 completions are not fully identical — the model retains enough stochasticity for ensembling to provide meaningful variance reduction.
+We sweep temperature across {0.0, 0.3, 0.7, 1.0} for the base prompt with the full model. At k=1, accuracy is stable across temperatures (71–73%, CIs overlapping). At k=8, ensembling helps at all temperatures, but the gain increases with temperature: from +4.6pp at temperature 0 (72.5% → 77.1%) to +9.8pp at temperature 1.0 (71.7% → 81.5%). Surprisingly, even at temperature 0 there is a significant +4.6pp gap between k=1 (72.5%) and k=8 (77.1%), with non-overlapping confidence intervals. This means `temperature=0` does not produce deterministic outputs — likely due to floating-point non-determinism in GPU inference and the absence of a `seed` parameter. This is a useful finding for practitioners: even deployments that assume deterministic scoring at temperature 0 can benefit from ensembling.
 
 Temperature 1.0 maximises ensemble diversity and the resulting accuracy gain, which is why we use it for all conditions. The k=1 baseline is not meaningfully affected by this choice.
 
