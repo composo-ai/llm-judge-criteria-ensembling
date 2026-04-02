@@ -122,6 +122,6 @@ This design minimises API calls while maximising the number of conditions that c
   title={Criteria Injection and Ensembling Are All You Need: A Systematic Evaluation of LLM Judge Techniques on RewardBench 2},
   author={Ryan Lail},
   year={2026},
-  url={https://github.com/composo-ai/rb2-judge-techniques}
+  url={https://github.com/composo-ai/llm-judge-criteria-ensembling}
 }
 ```
