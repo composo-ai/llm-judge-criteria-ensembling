@@ -23,10 +23,13 @@ All experiments use a unified collection script. Each collection gathers k=8 sco
 
 ```bash
 # Core collections (each runs the full RB2 dataset with both models, k=8)
-python collect.py --prompt base --models both --k 8       # Vanilla RB2 prompt
-python collect.py --prompt criteria --models both --k 8   # + task-specific criteria
-python collect.py --prompt cal-low --models both --k 8    # + calibration (low)
-python collect.py --prompt combined --models both --k 8   # + criteria + calibration
+python collect.py --prompt base --models both --k 8        # Vanilla RB2 prompt
+python collect.py --prompt criteria --models both --k 8    # + task-specific criteria
+python collect.py --prompt cal-low --models both --k 8     # + calibration (low anchors)
+python collect.py --prompt cal-high --models both --k 8    # + calibration (high anchors)
+python collect.py --prompt cal-both --models both --k 8    # + calibration (both anchors)
+python collect.py --prompt cal-cross --models both --k 8   # + calibration (cross-category)
+python collect.py --prompt combined --models both --k 8    # + criteria + calibration
 
 # Temperature sweep (base prompt, full model only)
 python collect.py --prompt base --models full --k 8 --temperature 0.0
@@ -78,8 +81,12 @@ All accuracy deltas in percentage points (pp). 95% bootstrap CIs shown. Conditio
 
 ```
 ├── judge.py                    # Shared judge logic: prompts, scoring, retry
-├── collect.py                  # Unified data collection (replaces 6 old runners)
+├── collect.py                  # Unified data collection
 ├── run_all.sh                  # Run all collections sequentially
+├── requirements.txt            # Python dependencies
+├── .env.example                # Template for Azure OpenAI credentials
+├── TECHNICAL_REPORT.md         # Full methodology and analysis
+├── LICENSE
 ├── analysis/
 │   ├── compute_metrics.py      # Derive conditions, compute metrics + CIs
 │   └── figures.py              # Generate all figures
@@ -106,7 +113,7 @@ This design minimises API calls while maximising the number of conditions that c
 
 - All collections write results **incrementally** (JSONL, flushed per example) and support **resume**.
 - Run in `tmux` to survive SSH disconnections.
-- `--sample-size 999` (default) runs the full dataset. Use a smaller value for quick tests.
+- By default, all examples are collected. Use `--sample-size N` to cap examples per subset for quick tests.
 
 ## Citation
 
