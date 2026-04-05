@@ -260,7 +260,7 @@ We evaluate four escalation strategies offline on the collected data.
 
 **Method.** For each individual response, use the full model score if the mini std exceeds a threshold $\theta$. Here $s_i^{\text{eff}}$ is the effective score for response $i$ — the value that gets used to determine the winner:
 
-$$s_i^{\text{eff}} = \begin{cases} s_i^{\text{full}} & \text{if } \text{std}(s_{i,1}^{\text{mini}}, \ldots, s_{i,k}^{\text{mini}}) \geq \theta \\ s_i^{\text{mini}} & \text{otherwise} \end{cases}$$
+$$s_i^{\text{eff}} = \begin{cases} \bar{s}_i^{\text{full}} & \text{if } \text{std}(s_{i,1}^{\text{mini}}, \ldots, s_{i,k}^{\text{mini}}) \geq \theta \\[6pt] \bar{s}_i^{\text{mini}} & \text{otherwise} \end{cases}$$
 
 The threshold $\theta$ is swept to trace the accuracy–cost tradeoff. Total cost scales with how often escalation is triggered: letting $p_{\text{esc}}$ denote the fraction of individual responses escalated across all examples,
 
