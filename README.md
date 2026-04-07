@@ -3,7 +3,19 @@
 **Author:** Ryan Lail<br>
 **Affiliation:** Composo AI
 
-Systematic evaluation of five candidate techniques for improving LLM-as-judge accuracy on [RewardBench 2](https://huggingface.co/datasets/allenai/reward-bench-2) (ratings mode). **Key finding:** a one-sentence task-specific criterion with k=8 ensembling reaches 83.6% — the best result at its cost level. Three additional techniques (calibration, model routing, soft blending) did not reliably improve on this. See [TECHNICAL_REPORT.md](TECHNICAL_REPORT.md) for full methodology and analysis.
+We systematically tested five techniques for improving LLM judge accuracy on [RewardBench 2](https://huggingface.co/datasets/allenai/reward-bench-2) and found that three simple, drop-in changes improve accuracy from 71.7% to 83.6%. No fine-tuning required.
+
+**Blog post:** [Improving LLM Judges With Experiments, Not Vibes](https://www.composo.ai/post/llm-judge-criteria-ensembling/) | **Full methodology:** [TECHNICAL_REPORT.md](TECHNICAL_REPORT.md)
+
+## What Works
+
+1. **Ask more than once.** LLM judges give different scores on every call. Request k=8 independent scores and average them — the noise cancels out. **+9.8pp at 5× cost.** Most of the gain comes by k=3.
+
+2. **Try mini models.** GPT-5.4 mini with k=8 achieves 79.2% at just **0.4× baseline cost** — better than the full model baseline at less than half the price. Add criteria and it hits 81.5%.
+
+3. **Be specific.** The standard judge prompt asks for generic qualities like "helpfulness, relevance, accuracy." Add a single sentence specifying what actually matters for each task. **+3.0pp at near-zero cost.** Criteria were pre-registered — no post-hoc tuning.
+
+Combined, criteria + ensembling reach **83.6%** accuracy at 5.3× baseline cost.
 
 ## Setup
 
