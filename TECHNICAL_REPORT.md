@@ -260,7 +260,12 @@ We evaluate four escalation strategies offline on the collected data.
 
 **Method.** For each individual response, use the full model score if the mini std exceeds a threshold $\theta$. Here $s_i^{\text{eff}}$ is the effective score for response $i$ — the value that gets used to determine the winner:
 
-$$s_i^{\text{eff}} = \begin{cases} s_i^{\text{full}} & \text{if } \text{std}(s_{i,1}^{\text{mini}}, \ldots, s_{i,k}^{\text{mini}}) \geq \theta \\ s_i^{\text{mini}} & \text{otherwise} \end{cases}$$
+$$
+s_i^{\text{eff}} = \begin{cases}
+s_i^{\text{full}} & \text{if } \text{std}(s_{i,1}^{\text{mini}}, \ldots, s_{i,k}^{\text{mini}}) \geq \theta \\
+s_i^{\text{mini}} & \text{otherwise}
+\end{cases}
+$$
 
 The threshold $\theta$ is swept to trace the accuracy–cost tradeoff. Total cost scales with how often escalation is triggered: letting $p_{\text{esc}}$ denote the fraction of individual responses escalated across all examples,
 
@@ -295,7 +300,13 @@ Each response's own variance $\sigma_i$ determines its blend weight independentl
 
 **Method.** Rather than choosing between mini and full model entirely, we use each response's mini variance to determine $n_{\text{full},i}$, the number of full model calls for that response. Low-variance responses use $n_{2,i} = 1$; high-variance responses use up to $n_{2,i} = n_{\max} = 8$:
 
-$$n_{\text{full},i}(\sigma_i) = \begin{cases} 1 & \text{if } \sigma_i \leq \sigma_1 \\ 1 + \dfrac{(\sigma_i - \sigma_1)(n_{\max} - 1)}{\sigma_2 - \sigma_1} & \text{if } \sigma_1 < \sigma_i < \sigma_2 \\ n_{\max} & \text{if } \sigma_i \geq \sigma_2 \end{cases}$$
+$$
+n_{\text{full},i}(\sigma_i) = \begin{cases}
+1 & \text{if } \sigma_i \leq \sigma_1 \\
+1 + \dfrac{(\sigma_i - \sigma_1)(n_{\max} - 1)}{\sigma_2 - \sigma_1} & \text{if } \sigma_1 < \sigma_i < \sigma_2 \\
+n_{\max} & \text{if } \sigma_i \geq \sigma_2
+\end{cases}
+$$
 
 Parameters $(\sigma_1, \sigma_2)$ are found by grid search over the 15th–95th percentile range of observed per-response variances, excluding extremes where the thresholds would have negligible effect. For each $(\sigma_1, \sigma_2)$, we compute accuracy by subsampling the first $n_{\text{full},i}(\sigma_i)$ full model scores for each response — no additional API calls needed.
 
