@@ -1,4 +1,4 @@
-# Criteria Injection and Ensembling Are All You Need: A Systematic Evaluation of LLM Judge Techniques on RewardBench 2
+# A Systematic Evaluation of LLM-as-Judge Improvement Techniques on RewardBench 2
 
 **Author:** Ryan Lail<br>
 **Affiliation:** Composo AI
