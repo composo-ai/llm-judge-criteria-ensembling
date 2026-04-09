@@ -124,16 +124,16 @@ This reduces the tie rate dramatically (353 → 77), since ties require *all* re
 
 | k | Full | Mini | Nano |
 |---|------|------|------|
-| 1 | 71.7% | 64.5% | 52.3% |
-| 2 | 77.3% | 72.8% | 60.8% |
-| 3 | 78.5% | 74.5% | 65.4% |
-| 4 | 79.5% | 76.6% | 68.1% |
-| 5 | 80.1% | 76.9% | 69.6% |
-| 6 | 80.9% | 77.5% | 70.0% |
-| 7 | 81.5% | 78.4% | 70.9% |
-| 8 | 81.6% | 79.1% | 71.4% |
+| 1 | 71.7% | 64.8% | 52.3% |
+| 2 | 77.3% | 73.0% | 60.8% |
+| 3 | 78.4% | 74.8% | 65.4% |
+| 4 | 79.4% | 76.8% | 68.1% |
+| 5 | 80.1% | 77.1% | 69.6% |
+| 6 | 80.9% | 77.7% | 70.0% |
+| 7 | 81.4% | 78.6% | 70.9% |
+| 8 | 81.5% | 79.2% | 71.4% |
 
-Most of the gain is captured by $k=3$ for all models. Nano benefits the most from ensembling in relative terms (+19.1pp from k=1 to k=8), reaching the full model's single-shot baseline (71.7%) at a fraction of the cost.
+Most of the gain is captured by $k=3$ for all models. Nano benefits the most from ensembling in relative terms (+19.1pp from k=1 to k=8), approaching the full model's single-shot baseline (71.7%) at a fraction of the cost.
 
 ![Diminishing Returns of Ensembling](figures/diminishing_returns.png)
 *Figure 1: Accuracy vs ensemble size k for full (GPT-5.4), mini (GPT-5.4 mini), and nano (GPT-5.4 nano) models. Most gain is captured by k=3.*
@@ -406,7 +406,7 @@ Criteria is the only prompt technique that helps at k=8, adding +2.1pp for the f
 
 A notable finding: **mini + criteria k=8 (81.5%) matches full model base ensemble (81.5%)** at roughly one-quarter the cost (1.2× vs 5.0×). For cost-constrained deployments, criteria + mini ensembling may be the optimal operating point.
 
-Nano k=8 (71.4%) matches the full model's single-shot baseline (71.7%) at 0.4× the cost — a 19.1pp gain from ensembling alone. This is the largest relative benefit of ensembling across all three model tiers, suggesting that cheaper models benefit disproportionately from repeated sampling. However, nano's accuracy ceiling is significantly lower: even at k=8, it trails mini k=8 by 7.8pp. Criteria and calibration variants were not collected for nano, so we cannot assess whether prompt improvements close this gap.
+Nano k=8 (71.4%) approaches the full model's single-shot baseline (71.7%) at 0.4× the cost — a 19.1pp gain from ensembling alone. This is the largest relative benefit of ensembling across all three model tiers, suggesting that cheaper models benefit disproportionately from repeated sampling. However, nano's accuracy ceiling is significantly lower: even at k=8, it trails mini k=8 by 7.8pp. Criteria and calibration variants were not collected for nano, so we cannot assess whether prompt improvements close this gap.
 
 ### 5.2 Precise IF as a Hard Category
 
@@ -475,7 +475,7 @@ All experiments were conducted via Azure OpenAI API version `2025-04-01-preview`
 - **Reasoning effort ablation**: testing `reasoning_effort` at "low", "medium", and "high" to quantify its impact on both baseline and ensemble accuracy.
 - **Long-context scaling**: RB2 examples average ~576 tokens. It is unclear whether ensembling and criteria injection remain effective for multi-turn conversations or document-length responses, where scoring behaviour and cost profiles may differ substantially.
 - **Criteria design sensitivity**: we used a single pre-registered criterion per category. Systematic variation of criterion wording, specificity, and number of criteria could reveal how robust the +2.1pp k=8 gain is to prompt engineering choices.
-- **Cheaper model tiers**: GPT-5.4 mini with criteria k=8 already matches the full model base ensemble (81.5%) at 1.2× cost. GPT-5.4 nano with k=8 achieves 71.4% at just 0.4× baseline cost — matching the full model's single-shot accuracy at a fraction of the price, though with a lower ceiling.
+- **Cheaper model tiers**: GPT-5.4 mini with criteria k=8 already matches the full model base ensemble (81.5%) at 1.2× cost. GPT-5.4 nano with k=8 achieves 71.4% at just 0.4× baseline cost — approaching the full model's single-shot accuracy at a fraction of the price, though with a lower ceiling.
 - **Extension to pairwise ranking tasks** (not just rating), where ensemble aggregation requires rank aggregation methods.
 
 ---
