@@ -2,5 +2,5 @@
 !.env.example
 .venv/
 __pycache__/
-results/
+results/raw/
 .claude/
