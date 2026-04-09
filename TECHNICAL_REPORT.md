@@ -173,7 +173,7 @@ For example, for the Math category this becomes:
 
 All other parts of the prompt are unchanged.
 
-**Result**: 74.7% (±1.9pp) (+3.0pp over baseline), $0.0140/example (1.0× baseline cost — marginal token increase only). Largest gain in Math (+12.0pp), where generic criteria are most underspecified. Precise IF shows a slight regression at k=1 (32.1% vs baseline 34.0%), but k=8 ensembling recovers it to 48.8%. With k=8 ensembling, criteria alone reach **83.6%** — the most cost-effective high-accuracy condition.
+**Result**: 74.7% (±1.9pp) (+3.0pp over baseline), $0.0140/example (1.1× baseline cost — marginal token increase only). Largest gain in Math (+12.0pp), where generic criteria are most underspecified. Precise IF shows a slight regression at k=1 (32.1% vs baseline 34.0%), but k=8 ensembling recovers it to 48.8%. With k=8 ensembling, criteria alone reach **83.6%** — the most cost-effective high-accuracy condition.
 
 ### 3.4 Calibration Context
 
@@ -292,7 +292,7 @@ $$s_i^{\text{eff}} = (1 - w_i) \cdot \bar{s}_i^{\text{mini}} + w_i \cdot \bar{s}
 
 Each response's own variance $\sigma_i$ determines its blend weight independently. The midpoint $m$ controls where the transition from mini-dominant to full-dominant scoring occurs. Steepness is fixed at 10 (making the transition sharp within a variance range of ~0.4). The optimal $m$ is found by sweeping over all unique per-response variance values.
 
-> **Result.** On the full dataset (in-sample), soft blending achieves 83.2% vs 81.5% for full model k=8. However, **on the held-out test set, soft blending (80.2%) does not beat full k=8 (81.5%)**, suggesting the in-sample gain is due to midpoint overfitting. The technique costs 5.4× baseline (both models at k=8) and does not justify this cost on out-of-sample data. See Section 5.4 for further analysis.
+> **Result.** On the full dataset (in-sample), soft blending achieves 83.2% vs 81.5% for full model k=8. However, **on the held-out test set, soft blending (80.2%) does not beat full k=8 (81.5%)**, suggesting the in-sample gain is due to midpoint overfitting. The technique costs 6.1× baseline (both models at k=8) and does not justify this cost on out-of-sample data. See Section 5.4 for further analysis.
 
 ![Soft Blending](figures/soft_blending.png)
 *Figure 5: Per-response soft blending accuracy vs mean blend weight $w$ (full dataset, in-sample). Accuracy increases monotonically with $w$, peaking at 83.2% near $w = 0.91$ (mostly full model). On a held-out test set, the blend (80.2%) does not beat full model k=8 (81.5%), suggesting the in-sample gain is partly due to midpoint overfitting (see Section 5.4).*
@@ -428,7 +428,7 @@ To understand the relationship more precisely, we measure how quickly mini's win
 | 8 | 78.7% | 0.785 |
 
 ![Mini-Full Convergence](figures/mini_full_convergence.png)
-*Figure 9: Model agreement with full (k=8) as a function of ensemble size. Mini agreement plateaus at ~80% by k=5. Nano agreement reaches ~70% at k=8, with a lower rank correlation ceiling (~0.67 vs ~0.79), confirming the larger capability gap.*
+*Figure 9: Model agreement with full (k=8) as a function of ensemble size. Mini agreement approaches ~79% by k=5. Nano agreement reaches ~70% at k=8, with a lower rank correlation ceiling (~0.67 vs ~0.79), confirming the larger capability gap.*
 
 Mini agreement approaches 80% by $k=3–5$. The ceiling is not a data limitation — it reflects genuine systematic disagreement between the two models on ~20% of examples. No amount of additional mini calls resolves this, which motivates the blending approach in Section 3.5.2: rather than treating mini as a noisy approximation to full, we treat them as complementary estimators with partially independent biases.
 
