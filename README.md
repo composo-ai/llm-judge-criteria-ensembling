@@ -11,7 +11,7 @@ We systematically tested five techniques for improving LLM judge accuracy on [Re
 
 1. **Ask more than once.** LLM judges give different scores on every call. Request k=8 independent scores and average them — the noise cancels out. **+9.8pp at 5× cost.** Most of the gain comes by k=3.
 
-2. **Try mini models.** GPT-5.4 mini with k=8 achieves 79.2% at just **0.4× baseline cost** — better than the full model baseline at less than half the price. Add criteria and it hits 81.5%.
+2. **Try mini models.** GPT-5.4 mini with k=8 achieves 79.2% at **1.2× baseline cost** — nearly matching the full model ensemble at a fraction of its price. Add criteria and it hits 81.5%.
 
 3. **Be specific.** The standard judge prompt asks for generic qualities like "helpfulness, relevance, accuracy." Add a single sentence specifying what actually matters for each task. **+3.0pp at near-zero cost.** Criteria were pre-registered — no post-hoc tuning.
 
@@ -19,7 +19,7 @@ Combined, criteria + ensembling reach **83.6%** accuracy at 5.3× baseline cost.
 
 ## Setup
 
-**Requirements**: Python 3.13, Azure OpenAI access (GPT-5.4 and GPT-5.4 mini deployments).
+**Requirements**: Python 3.13, Azure OpenAI access (GPT-5.4, GPT-5.4 mini, and optionally GPT-5.4 nano deployments).
 
 ```bash
 python3.13 -m venv .venv
@@ -42,6 +42,9 @@ python collect.py --prompt cal-high --models both --k 8    # + calibration (high
 python collect.py --prompt cal-both --models both --k 8    # + calibration (both anchors)
 python collect.py --prompt cal-cross --models both --k 8   # + calibration (cross-category)
 python collect.py --prompt combined --models both --k 8    # + criteria + calibration
+
+# Nano model (base prompt only — merged with base_both by ID in analysis)
+python collect.py --prompt base --models nano --k 8
 
 # Temperature sweep (base prompt, full model only)
 python collect.py --prompt base --models full --k 8 --temperature 0.0
@@ -69,21 +72,23 @@ All accuracy deltas in percentage points (pp). 95% bootstrap CIs shown. Conditio
 
 | Condition | N | Overall (95% CI) | $/example | vs Baseline |
 |-----------|---|------------------|-----------|-------------|
-| Baseline (full k=1) | 1729 | 71.7% (±2.0pp) | $0.0133 | 1.0× |
-| Criteria (full k=1) | 1738 | 74.7% (±1.9pp) | $0.0140 | 1.1× |
-| Ensemble (full k=8) | 1730 | 81.5% (±1.8pp) | $0.0663 | 5.0× |
+| Baseline (full k=1) | 1729 | 71.7% (±2.0pp) | $0.0134 | 1.0× |
+| Criteria (full k=1) | 1738 | 74.7% (±1.9pp) | $0.0140 | 1.0× |
+| Ensemble (full k=8) | 1730 | 81.5% (±1.8pp) | $0.0665 | 5.0× |
 | **Criteria (full k=8)** | 1741 | **83.6%** (±1.6pp) | $0.0702 | 5.3× |
-| Mini model k=8 | 1730 | 79.2% (±1.9pp) | $0.0051 | 0.4× |
-| Criteria (mini k=8) | 1741 | 81.5% (±1.7pp) | $0.0053 | 0.4× |
+| Mini model k=8 | 1730 | 79.2% (±1.9pp) | $0.0154 | 1.2× |
+| Criteria (mini k=8) | 1741 | 81.5% (±1.7pp) | $0.0160 | 1.2× |
+| Nano model k=8 | 1705 | 71.4% (±2.0pp) | $0.0058 | 0.4× |
+| Nano model k=1 | 1700 | 52.3% (±2.3pp) | $0.0011 | 0.1× |
 
 **Investigated techniques (did not improve on criteria k=8):**
 
 | Condition | N | Overall (95% CI) | $/example | vs Baseline |
 |-----------|---|------------------|-----------|-------------|
 | Calibration low (k=1) | 1737 | 73.8% (±2.0pp) | $0.0198 | 1.5× |
-| Calibration low (k=8) | 1737 | 81.7% | $0.0663 | 5.0× |
-| Combined (full k=8) | 1746 | 82.6% (±1.6pp) | $0.0803 | 6.0× |
-| Combined + blend (test) ‡ | ~349 | 84.8% | $0.0803 | 6.0× |
+| Calibration low (k=8) | 1737 | 81.7% | $0.0744 | 5.6× |
+| Combined (full k=8) | 1746 | 82.6% (±1.6pp) | $0.0913 | 6.8× |
+| Combined + blend (test) ‡ | ~349 | 84.8% | $0.0913 | 6.8× |
 
 > **‡** Blend parameters optimised on 80% train split, accuracy on held-out 20%. See report for caveats.
 

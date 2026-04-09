@@ -39,6 +39,15 @@ echo ">>> Collection 7/7: Combined (criteria + cal-low)"
 python collect.py --prompt combined --models both --k 8
 
 # -----------------------------------------------
+# Nano model (base prompt only, k=8)
+# Merged with base_both by ID in analysis
+# -----------------------------------------------
+
+echo ""
+echo ">>> Nano model: Base prompt"
+python collect.py --prompt base --models nano --k 8
+
+# -----------------------------------------------
 # Temperature sweep (base prompt, full model, k=8)
 # Subsampled to k=1 in analysis
 # -----------------------------------------------

@@ -15,6 +15,7 @@ Prompt variants:
 
 Usage:
   python collect.py --prompt base --models both --k 8
+  python collect.py --prompt base --models all --k 8
   python collect.py --prompt criteria --models both --k 8
   python collect.py --prompt base --models full --k 1 --temperature 0.0
 """
@@ -23,6 +24,7 @@ import argparse
 import asyncio
 import json
 import os
+import sys
 import random
 import time
 from collections import defaultdict
@@ -205,6 +207,7 @@ async def score_example(
     criteria: str | None = None,
     calibration_example: dict | None = None,
     cal_metadata: dict | None = None,
+    cal_model_key: str | None = None,
 ) -> dict:
     subset = example["subset"]
     prompt = example["prompt"]
@@ -245,10 +248,10 @@ async def score_example(
         cost[f"{mk}_input_tokens"] = inp_tok
         cost[f"{mk}_output_tokens"] = out_tok
 
-    # Attribute calibration cost to the full model (it's always scored by full)
-    if cal_metadata and "cal_cost" in cal_metadata:
-        cost["full_input_tokens"] = cost.get("full_input_tokens", 0) + cal_metadata["cal_cost"]["input_tokens"]
-        cost["full_output_tokens"] = cost.get("full_output_tokens", 0) + cal_metadata["cal_cost"]["output_tokens"]
+    # Attribute calibration cost to whichever model scored the calibration example
+    if cal_metadata and "cal_cost" in cal_metadata and cal_model_key:
+        cost[f"{cal_model_key}_input_tokens"] = cost.get(f"{cal_model_key}_input_tokens", 0) + cal_metadata["cal_cost"]["input_tokens"]
+        cost[f"{cal_model_key}_output_tokens"] = cost.get(f"{cal_model_key}_output_tokens", 0) + cal_metadata["cal_cost"]["output_tokens"]
 
     result["cost"] = cost
     if cal_metadata:
@@ -279,7 +282,8 @@ async def main():
         epilog=__doc__,
     )
     parser.add_argument("--prompt", required=True, choices=PROMPT_VARIANTS)
-    parser.add_argument("--models", default="both", choices=["mini", "full", "both"])
+    parser.add_argument("--models", default="both",
+                        choices=["nano", "mini", "full", "both", "all"])
     parser.add_argument("--k", type=int, default=8)
     parser.add_argument("--temperature", type=float, default=1.0)
     parser.add_argument("--sample-size", type=int, default=999,
@@ -292,6 +296,8 @@ async def main():
                         default=os.environ.get("AZURE_OPENAI_DEPLOYMENT", "gpt-5.4"))
     parser.add_argument("--mini-model",
                         default=os.environ.get("AZURE_OPENAI_MINI_DEPLOYMENT", "gpt-5.4-mini"))
+    parser.add_argument("--nano-model",
+                        default=os.environ.get("AZURE_OPENAI_NANO_DEPLOYMENT", "gpt-5.4-nano"))
     args = parser.parse_args()
 
     # --- Dataset ---
@@ -333,26 +339,42 @@ async def main():
         print(f"  Resuming: {len(completed)} done")
 
     # --- Clients ---
+    # Expand "both" and "all" to the set of models to create
+    models_to_run = {
+        "both": {"mini", "full"},
+        "all": {"nano", "mini", "full"},
+    }.get(args.models, {args.models})
+
     clients: dict[str, AsyncAzureOpenAI] = {}
     model_names: dict[str, str] = {}
-    if args.models in ("full", "both"):
+    if "full" in models_to_run:
         if not os.environ.get("AZURE_OPENAI_API_KEY"):
-            print("ERROR: AZURE_OPENAI_API_KEY not set"); return
+            print("ERROR: AZURE_OPENAI_API_KEY not set"); sys.exit(1)
         clients["full"] = AsyncAzureOpenAI(api_version="2025-04-01-preview")
         model_names["full"] = args.full_model
-    if args.models in ("mini", "both"):
+    if "mini" in models_to_run:
         if not os.environ.get("AZURE_OPENAI_MINI_API_KEY"):
-            print("ERROR: AZURE_OPENAI_MINI_API_KEY not set"); return
+            print("ERROR: AZURE_OPENAI_MINI_API_KEY not set"); sys.exit(1)
         clients["mini"] = AsyncAzureOpenAI(
             api_key=os.environ["AZURE_OPENAI_MINI_API_KEY"],
             azure_endpoint=os.environ["AZURE_OPENAI_MINI_ENDPOINT"],
             api_version="2025-04-01-preview",
         )
         model_names["mini"] = args.mini_model
+    if "nano" in models_to_run:
+        if not os.environ.get("AZURE_OPENAI_NANO_API_KEY"):
+            print("ERROR: AZURE_OPENAI_NANO_API_KEY not set"); sys.exit(1)
+        clients["nano"] = AsyncAzureOpenAI(
+            api_key=os.environ["AZURE_OPENAI_NANO_API_KEY"],
+            azure_endpoint=os.environ["AZURE_OPENAI_NANO_ENDPOINT"],
+            api_version="2025-04-01-preview",
+        )
+        model_names["nano"] = args.nano_model
 
-    # Calibration always uses the full model (or only available model)
-    cal_client = clients.get("full", clients.get("mini"))
-    cal_model = model_names.get("full", model_names.get("mini"))
+    # Calibration always uses the most capable available model
+    cal_model_key = "full" if "full" in clients else ("mini" if "mini" in clients else "nano")
+    cal_client = clients[cal_model_key]
+    cal_model = model_names[cal_model_key]
 
     sem = asyncio.Semaphore(args.concurrency)
     rng = random.Random(args.seed)
@@ -418,6 +440,7 @@ async def main():
                     args.prompt, criteria=criteria,
                     calibration_example=cal_examples[i],
                     cal_metadata=cal_metas[i],
+                    cal_model_key=cal_model_key,
                 )
                 for i, ex in enumerate(batch)
             ]
