@@ -366,7 +366,7 @@ The calibration "low" variant is used as default (slightly best-performing in is
 | Condition | N | Overall (95% CI) | Factuality | Focus | Math | Precise IF | Safety | $/example | vs Baseline |
 |-----------|---|-------------------|------------|-------|------|------------|--------|-----------|-------------|
 | Calibration low (k=1) | 1737 | 73.8% (±2.0pp) | 78.9% | 71.5% | 65.6% | 32.5% | 89.9% | $0.0198 | 1.5× |
-| Calibration low (k=8) | 1737 | 81.7% | 86.7% | 80.6% | 75.4% | 46.9% | 93.0% | $0.0744 | 5.6× |
+| Calibration low (k=8) | 1737 | 81.7% (±1.7pp) | 86.7% | 80.6% | 75.4% | 46.9% | 93.0% | $0.0744 | 5.6× |
 | Calibration high (k=1) | 1744 | 72.4% (±2.1pp) | 77.3% | 68.4% | 67.8% | 34.4% | 87.7% | $0.0192 | 1.4× |
 | Calibration both (k=1) | 1730 | 72.8% (±2.0pp) | 77.3% | 71.1% | 65.6% | 31.9% | 88.8% | $0.0256 | 1.9× |
 | Calibration cross (k=1) | 1745 | 72.4% (±2.1pp) | 77.0% | 68.2% | 68.0% | 30.6% | 89.1% | $0.0194 | 1.5× |
