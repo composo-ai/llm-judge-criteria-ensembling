@@ -282,7 +282,7 @@ where $C_{\text{mini}}$ and $C_{\text{full}}$ are the fixed costs of running all
 
 #### 3.5.2 Soft Blending (Sigmoid)
 
-**Motivation.** If mini and full model scores are imperfectly correlated estimators of response quality, a weighted combination may have lower variance than either alone. We confirm empirically that mini and full score variances are imperfectly correlated ($\rho = 0.411$).
+**Motivation.** If mini and full model scores are imperfectly correlated estimators of response quality, a weighted combination may have lower variance than either alone. We confirm empirically that mini and full score variances are imperfectly correlated ($\rho = 0.421$).
 
 **Method.** We blend mini and full model scores continuously using a per-response sigmoid weight:
 
