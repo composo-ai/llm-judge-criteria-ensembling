@@ -73,7 +73,7 @@ def _find_collection(prefix: str) -> list[dict] | None:
 
 def _merge_nano(data: list[dict], prefix: str) -> list[dict]:
     """Merge standalone nano collection into data if present and needed."""
-    if data and "nano_scores" in data[0]:
+    if data and any("nano_scores" in r for r in data):
         return data
     # Strip model suffix to get the base prefix (e.g., "base_both" -> "base")
     base_prefix = prefix.split("_")[0] if "_" in prefix else prefix
@@ -95,8 +95,8 @@ def _merge_nano(data: list[dict], prefix: str) -> list[dict]:
             for tk in ("nano_input_tokens", "nano_output_tokens"):
                 if tk in nr.get("cost", {}):
                     r["cost"][tk] = nr["cost"][tk]
-            merged.append(r)
-    return merged if merged else data
+        merged.append(r)
+    return merged
 
 
 # ===================================================================
@@ -306,7 +306,7 @@ def plot_variance_correlation(metrics):
 
     from scipy import stats as sp_stats
 
-    has_nano = data and "nano_scores" in data[0]
+    has_nano = data and any("nano_scores" in r for r in data)
     n_plots = 2 if has_nano else 1
     fig, axes = plt.subplots(1, n_plots, figsize=(8 * n_plots, 8))
     if n_plots == 1:

@@ -695,6 +695,7 @@ def main():
     if base and base_nano and "nano_scores" not in base[1][0]:
         nano_by_id = {r["id"]: r for r in base_nano[1]}
         merged = []
+        n_with_nano = 0
         for r in base[1]:
             nr = nano_by_id.get(r["id"])
             if nr:
@@ -705,10 +706,10 @@ def main():
                 for tk in ("nano_input_tokens", "nano_output_tokens"):
                     if tk in nr.get("cost", {}):
                         r["cost"][tk] = nr["cost"][tk]
-                merged.append(r)
-        if merged:
-            print(f"Merged nano scores into base: {len(merged)} / {len(base[1])} examples")
-            base = (base[0], merged)
+                n_with_nano += 1
+            merged.append(r)
+        print(f"Merged nano scores into base: {n_with_nano} / {len(base[1])} examples")
+        base = (base[0], merged)
 
     # Temperature sweep files (new format only)
     temp_files = {}
@@ -777,7 +778,7 @@ def main():
         print(f"  Mini k=1: {m['accuracy']['overall']:.3f}")
 
         # Nano conditions (if nano scores are present)
-        if "nano_scores" in data[0]:
+        if any("nano_scores" in r for r in data):
             m = _condition_metrics("Nano k=8", data, "nano", k=8,
                                   deploy_models="nano", deploy_k=8)
             all_metrics["nano_k8"] = m
@@ -801,14 +802,15 @@ def main():
             a = compute_accuracy(data, model="mini", k_subset=k_sub)
             dim_mini[k_sub] = a["overall"]
         all_metrics["diminishing_returns_mini"] = dim_mini
-        if "nano_scores" in data[0]:
+        if any("nano_scores" in r for r in data):
             dim_nano = {}
             for k_sub in range(1, 9):
                 a = compute_accuracy(data, model="nano", k_subset=k_sub)
                 dim_nano[k_sub] = a["overall"]
             all_metrics["diminishing_returns_nano"] = dim_nano
-            print(f"  Diminishing returns (nano): {' '.join(f'k={k}:{v:.3f}' for k, v in dim_nano.items())}")
         print(f"  Diminishing returns (full): {' '.join(f'k={k}:{v:.3f}' for k, v in dim.items())}")
+        if "diminishing_returns_nano" in all_metrics:
+            print(f"  Diminishing returns (nano): {' '.join(f'k={k}:{v:.3f}' for k, v in all_metrics['diminishing_returns_nano'].items())}")
 
         # Variance metrics
         var = compute_variance_metrics(data, model="full")
@@ -838,7 +840,7 @@ def main():
             conv = compute_ensemble_convergence(data, cheap_model="mini")
             all_metrics["convergence"] = conv
 
-            if "nano_scores" in data[0]:
+            if any("nano_scores" in r for r in data):
                 conv_nano = compute_ensemble_convergence(data, cheap_model="nano")
                 all_metrics["convergence_nano"] = conv_nano
 

@@ -11,7 +11,7 @@ We systematically tested five techniques for improving LLM judge accuracy on [Re
 
 1. **Ask more than once.** LLM judges give different scores on every call. Request k=8 independent scores and average them — the noise cancels out. **+9.8pp at 5× cost.** Most of the gain comes by k=3.
 
-2. **Try mini models.** GPT-5.4 mini with k=8 achieves 79.2% at **1.2× baseline cost** — nearly matching the full model ensemble at a fraction of its price. Add criteria and it hits 81.5%.
+2. **Try mini models.** GPT-5.4 mini with k=8 achieves 79.2% at **1.2× baseline cost** — at one-quarter the full ensemble's cost. Add criteria and it hits 81.5%.
 
 3. **Be specific.** The standard judge prompt asks for generic qualities like "helpfulness, relevance, accuracy." Add a single sentence specifying what actually matters for each task. **+3.0pp at near-zero cost.** Criteria were pre-registered — no post-hoc tuning.
 
