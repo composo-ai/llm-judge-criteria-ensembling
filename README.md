@@ -72,13 +72,13 @@ All accuracy deltas in percentage points (pp). 95% bootstrap CIs shown. Conditio
 
 | Condition | N | Overall (95% CI) | $/example | vs Baseline |
 |-----------|---|------------------|-----------|-------------|
-| Baseline (full k=1) | 1729 | 71.7% (±2.0pp) | $0.0134 | 1.0× |
+| Baseline (full k=1) | 1729 | 71.7% (±2.0pp) | $0.0133 | 1.0× |
 | Criteria (full k=1) | 1738 | 74.7% (±1.9pp) | $0.0140 | 1.0× |
-| Ensemble (full k=8) | 1730 | 81.5% (±1.8pp) | $0.0665 | 5.0× |
+| Ensemble (full k=8) | 1730 | 81.5% (±1.8pp) | $0.0663 | 5.0× |
 | **Criteria (full k=8)** | 1741 | **83.6%** (±1.6pp) | $0.0702 | 5.3× |
 | Mini model k=8 | 1730 | 79.2% (±1.9pp) | $0.0154 | 1.2× |
 | Criteria (mini k=8) | 1741 | 81.5% (±1.7pp) | $0.0160 | 1.2× |
-| Nano model k=8 | 1705 | 71.4% (±2.0pp) | $0.0058 | 0.4× |
+| Nano model k=8 | 1705 | 71.4% (±2.0pp) | $0.0057 | 0.4× |
 | Nano model k=1 | 1700 | 52.3% (±2.3pp) | $0.0011 | 0.1× |
 
 **Investigated techniques (did not improve on criteria k=8):**

@@ -609,7 +609,9 @@ def compute_ensemble_convergence(
 ) -> dict:
     score_key = f"{cheap_model}_scores"
     ref_key = f"{reference_model}_scores"
-    if not data or score_key not in data[0] or ref_key not in data[0]:
+    # Filter to examples that have both model scores
+    data = [r for r in data if score_key in r and ref_key in r]
+    if not data:
         return {"by_k": []}
 
     max_k = min(len(r[score_key][0]) for r in data)

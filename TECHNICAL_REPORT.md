@@ -108,7 +108,7 @@ Score parsing extracts the last integer in the response; any reply not ending wi
 
 The baseline condition applies the RB2 prompt verbatim with $k=1$ completion per response — four API calls per example, all using the full GPT-5.4 model. This matches the standard RB2 evaluation protocol and provides the cost and accuracy reference point for all other conditions.
 
-**Result**: 71.7% accuracy (95% CI: ±2.0pp), mean cost $0.0134/example.
+**Result**: 71.7% accuracy (95% CI: ±2.0pp), mean cost $0.0133/example.
 
 ### 3.2 Ensemble Scoring (k=8)
 
@@ -139,7 +139,7 @@ Most of the gain is captured by $k=3$ for all models. Nano benefits the most fro
 *Figure 1: Accuracy vs ensemble size k for full (GPT-5.4), mini (GPT-5.4 mini), and nano (GPT-5.4 nano) models. Most gain is captured by k=3.*
 
 
-**Result**: 81.5% (±1.8pp) (+9.8pp over baseline), $0.0665/example (5.0× baseline cost).
+**Result**: 81.5% (±1.8pp) (+9.8pp over baseline), $0.0663/example (5.0× baseline cost).
 
 ### 3.3 Task-Specific Criteria
 
@@ -318,12 +318,12 @@ The **budget-constrained** variant restricts mean $n_{\text{full}} \leq 2.0$, ac
 ![Variance-Informed Ensembling](figures/variance_informed_ensembling.png)
 *Figure 6: Pareto frontier for per-response variance-informed ensembling (black) vs fixed-k full model (blue). The frontier and gray grid points show train-set accuracy (80% of data); the two stars show test-set accuracy (held-out 20%) for the best overall (red, 81.0%) and budget-constrained (green, 74.9%) configurations. The stars fall below the frontier because they reflect out-of-sample performance.*
 
-**Summary of escalation strategies** (costs relative to k=1 full model baseline at $0.0134/example):
+**Summary of escalation strategies** (costs relative to k=1 full model baseline at $0.0133/example):
 
 | Strategy | Accuracy | $/example | vs k=1 full |
 |----------|----------|-----------|-------------|
-| k=1 full (baseline) | 71.7% | $0.0134 | 1.0× |
-| Full model k=8 | 81.5% | $0.0665 | 5.0× |
+| k=1 full (baseline) | 71.7% | $0.0133 | 1.0× |
+| Full model k=8 | 81.5% | $0.0663 | 5.0× |
 | Soft blend (full dataset) | 83.2% | $0.0818 | 6.1× |
 | Soft blend (test set) | 80.2% | $0.0818 | 6.1× |
 | Var-informed (≤2 calls, test set) | 74.9% | ~$0.022 | 1.6× |
@@ -352,13 +352,13 @@ The calibration "low" variant is used as default (slightly best-performing in is
 
 | Condition | N | Overall (95% CI) | Factuality | Focus | Math | Precise IF | Safety | $/example | vs Baseline |
 |-----------|---|-------------------|------------|-------|------|------------|--------|-----------|-------------|
-| Baseline (full k=1) | 1729 | 71.7% (±2.0pp) | 76.4% | 70.1% | 61.2% | 34.0% | 87.3% | $0.0134 | 1.0× |
+| Baseline (full k=1) | 1729 | 71.7% (±2.0pp) | 76.4% | 70.1% | 61.2% | 34.0% | 87.3% | $0.0133 | 1.0× |
 | Criteria (full k=1) | 1738 | 74.7% (±1.9pp) | 77.9% | 72.3% | 73.2% | 32.1% | 90.6% | $0.0140 | 1.0× |
-| Ensemble (full k=8) | 1730 | 81.5% (±1.8pp) | 86.7% | 81.8% | 74.9% | 44.7% | 92.1% | $0.0665 | 5.0× |
+| Ensemble (full k=8) | 1730 | 81.5% (±1.8pp) | 86.7% | 81.8% | 74.9% | 44.7% | 92.1% | $0.0663 | 5.0× |
 | **Criteria (full k=8)** | 1741 | **83.6%** (±1.6pp) | **89.1%** | **82.8%** | **79.2%** | 48.8% | **93.2%** | $0.0702 | 5.3× |
 | Mini model k=8 | 1730 | 79.2% (±1.9pp) | 83.3% | 80.2% | 68.3% | 40.3% | 92.8% | $0.0154 | 1.2× |
 | Criteria (mini k=8) | 1741 | 81.5% (±1.7pp) | — | — | — | — | — | $0.0160 | 1.2× |
-| Nano model k=8 | 1705 | 71.4% (±2.0pp) | 67.9% | 74.5% | 61.2% | 42.4% | 87.6% | $0.0058 | 0.4× |
+| Nano model k=8 | 1705 | 71.4% (±2.0pp) | 67.9% | 74.5% | 61.2% | 42.4% | 87.6% | $0.0057 | 0.4× |
 | Nano model k=1 | 1700 | 52.3% (±2.3pp) | 45.6% | 51.0% | 45.1% | 26.3% | 74.9% | $0.0011 | 0.1× |
 
 **Investigated techniques (did not improve on criteria k=8):**
