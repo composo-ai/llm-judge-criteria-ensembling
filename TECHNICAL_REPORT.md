@@ -324,11 +324,11 @@ The **budget-constrained** variant restricts mean $n_{\text{full}} \leq 2.0$, ac
 |----------|----------|-----------|-------------|
 | k=1 full (baseline) | 71.7% | $0.0133 | 1.0× |
 | Full model k=8 | 81.5% | $0.0663 | 5.0× |
-| Soft blend (full dataset) | 83.2% | $0.0818 | 6.1× |
-| Soft blend (test set) | 80.2% | $0.0818 | 6.1× |
+| Soft blend (full dataset) | 83.2% | $0.0817 | 6.1× |
+| Soft blend (test set) | 80.2% | $0.0817 | 6.1× |
 | Var-informed (≤2 calls, test set) | 74.9% | ~$0.022 | 1.6× |
 
-Soft blending achieves 83.2% on the full dataset (80.2% on a held-out 20% test set) at $0.0818/example (6.1×).
+Soft blending achieves 83.2% on the full dataset (80.2% on a held-out 20% test set) at $0.0817/example (6.1×).
 
 ### 3.6 Combined Condition
 
@@ -353,13 +353,13 @@ The calibration "low" variant is used as default (slightly best-performing in is
 | Condition | N | Overall (95% CI) | Factuality | Focus | Math | Precise IF | Safety | $/example | vs Baseline |
 |-----------|---|-------------------|------------|-------|------|------------|--------|-----------|-------------|
 | Baseline (full k=1) | 1729 | 71.7% (±2.0pp) | 76.4% | 70.1% | 61.2% | 34.0% | 87.3% | $0.0133 | 1.0× |
-| Criteria (full k=1) | 1738 | 74.7% (±1.9pp) | 77.9% | 72.3% | 73.2% | 32.1% | 90.6% | $0.0140 | 1.0× |
+| Criteria (full k=1) | 1738 | 74.7% (±1.9pp) | 77.9% | 72.3% | 73.2% | 32.1% | 90.6% | $0.0140 | 1.1× |
 | Ensemble (full k=8) | 1730 | 81.5% (±1.8pp) | 86.7% | 81.8% | 74.9% | 44.7% | 92.1% | $0.0663 | 5.0× |
 | **Criteria (full k=8)** | 1741 | **83.6%** (±1.6pp) | **89.1%** | **82.8%** | **79.2%** | 48.8% | **93.2%** | $0.0702 | 5.3× |
 | Mini model k=8 | 1730 | 79.2% (±1.9pp) | 83.3% | 80.2% | 68.3% | 40.3% | 92.8% | $0.0154 | 1.2× |
-| Criteria (mini k=8) | 1741 | 81.5% (±1.7pp) | — | — | — | — | — | $0.0160 | 1.2× |
+| Criteria (mini k=8) | 1742 | 81.5% (±2.0pp) | — | — | — | — | — | $0.0160 | 1.2× |
 | Nano model k=8 | 1705 | 71.4% (±2.0pp) | 67.9% | 74.5% | 61.2% | 42.4% | 87.6% | $0.0057 | 0.4× |
-| Nano model k=1 | 1700 | 52.3% (±2.3pp) | 45.6% | 51.0% | 45.1% | 26.3% | 74.9% | $0.0011 | 0.1× |
+| Nano model k=1 | 1700 | 52.3% (±2.4pp) | 45.6% | 51.0% | 45.1% | 26.3% | 74.9% | $0.0011 | 0.1× |
 
 **Investigated techniques (did not improve on criteria k=8):**
 
@@ -371,7 +371,7 @@ The calibration "low" variant is used as default (slightly best-performing in is
 | Calibration both (k=1) | 1730 | 72.8% (±2.0pp) | 77.3% | 71.1% | 65.6% | 31.9% | 88.8% | $0.0256 | 1.9× |
 | Calibration cross (k=1) | 1745 | 72.4% (±2.1pp) | 77.0% | 68.2% | 68.0% | 30.6% | 89.1% | $0.0194 | 1.5× |
 | Combined (full k=8) | 1746 | 82.6% (±1.6pp) | 87.6% | 80.6% | 77.6% | **52.5%** | 92.8% | $0.0913 | 6.8× |
-| Soft blend (test) ‡ | ~343 | 80.2% | — | — | — | — | — | $0.0818 | 6.1× |
+| Soft blend (test) ‡ | ~343 | 80.2% | — | — | — | — | — | $0.0817 | 6.1× |
 | Combined + blend (test) ‡† | ~349 | 84.8% | — | — | — | — | — | $0.0913 | 6.8× |
 | Var-informed (≤2 calls, test) ‡ | ~343 | 74.9% | — | — | — | — | — | ~$0.022 | 1.6× |
 
@@ -420,12 +420,12 @@ To understand the relationship more precisely, we measure how quickly mini's win
 
 | k | Agreement | Rank corr (ρ) |
 |---|-----------|---------------|
-| 1 | 67.4% | 0.762 |
-| 2 | 74.0% | 0.775 |
-| 3 | 76.1% | 0.779 |
-| 4 | 77.3% | 0.784 |
-| 5 | 78.6% | 0.787 |
-| 8 | 79.8% | 0.790 |
+| 1 | 65.1% | 0.761 |
+| 2 | 72.7% | 0.771 |
+| 3 | 75.0% | 0.780 |
+| 4 | 76.6% | 0.779 |
+| 5 | 77.5% | 0.781 |
+| 8 | 78.7% | 0.785 |
 
 ![Mini-Full Convergence](figures/mini_full_convergence.png)
 *Figure 9: Model agreement with full (k=8) as a function of ensemble size. Mini agreement plateaus at ~80% by k=5. Nano agreement reaches ~70% at k=8, with a lower rank correlation ceiling (~0.67 vs ~0.79), confirming the larger capability gap.*
