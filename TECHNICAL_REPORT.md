@@ -467,7 +467,7 @@ This suggests that for practitioners adopting LLM judges, the highest-value inte
 
 ### Reproducibility
 
-All experiments were conducted via Azure OpenAI API version `2025-04-01-preview` using GPT-5.4, GPT-5.4 mini, and GPT-5.4 nano deployments. Data was collected in March–April 2026. All API calls use temperature 1.0 with no seed parameter, so individual scores are not deterministically reproducible; however, aggregate accuracy metrics are stable across runs (within the reported bootstrap confidence intervals). Total API spend across all collections and temperature sweeps was approximately $1,200. All collection scripts write results incrementally and support resume; the full dataset can be re-collected by running `bash run_all.sh`.
+All experiments were conducted via Azure OpenAI API version `2025-04-01-preview` using GPT-5.4, GPT-5.4 mini, and GPT-5.4 nano deployments. Data was collected in March–April 2026. All API calls use temperature 1.0 with no seed parameter, so individual scores are not deterministically reproducible; however, aggregate accuracy metrics are stable across runs (within the reported bootstrap confidence intervals). Total API spend across all collections and temperature sweeps was approximately $1,500. All collection scripts write results incrementally and support resume; the full dataset can be re-collected by running `bash run_all.sh`.
 
 ### Future Work
 
