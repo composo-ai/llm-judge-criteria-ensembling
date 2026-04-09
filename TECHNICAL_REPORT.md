@@ -239,7 +239,7 @@ At k=1, calibration provides a modest +1–2pp gain. **At k=8, calibration adds 
 
 ### 3.5 Adaptive Escalation with Dual-Model Scoring
 
-**Motivation.** GPT-5.4 mini is ~10× cheaper than the full model but somewhat less accurate. If we could identify in advance which examples the mini model will get wrong, we could route only those to the full model, achieving high accuracy at low cost. We use the mini model's score variance as a proxy for example difficulty and routing uncertainty.
+**Motivation.** GPT-5.4 mini is ~3× cheaper than the full model but somewhat less accurate. If we could identify in advance which examples the mini model will get wrong, we could route only those to the full model, achieving high accuracy at low cost. We use the mini model's score variance as a proxy for example difficulty and routing uncertainty.
 
 **Data collection.** We run both models (mini n=8, full n=8) on every example. This gives us paired data for all downstream escalation strategies without additional API calls.
 
@@ -410,7 +410,7 @@ Nano k=8 (71.4%) approaches the full model's single-shot baseline (71.7%) at 0.4
 
 ### 5.2 Precise IF as a Hard Category
 
-Precise IF is the lowest-performing category across all conditions (30–53%). It has the highest baseline tie rate, suggesting the judge struggles to discriminate between responses that differ only in formatting constraint satisfaction. The combined condition shows the largest absolute improvement here (+18.5pp over baseline), suggesting that richer context (calibration + criteria) helps the judge notice subtle constraint violations.
+Precise IF is the lowest-performing category across all conditions (26–53%). It has the highest baseline tie rate, suggesting the judge struggles to discriminate between responses that differ only in formatting constraint satisfaction. The combined condition shows the largest absolute improvement here (+18.5pp over baseline), suggesting that richer context (calibration + criteria) helps the judge notice subtle constraint violations.
 
 ### 5.3 Mini vs Full Model: Convergence and Disagreement
 
@@ -430,7 +430,7 @@ To understand the relationship more precisely, we measure how quickly mini's win
 ![Mini-Full Convergence](figures/mini_full_convergence.png)
 *Figure 9: Model agreement with full (k=8) as a function of ensemble size. Mini agreement approaches ~79% by k=5. Nano agreement reaches ~70% at k=8, with a lower rank correlation ceiling (~0.67 vs ~0.79), confirming the larger capability gap.*
 
-Mini agreement approaches 80% by $k=3–5$. The ceiling is not a data limitation — it reflects genuine systematic disagreement between the two models on ~20% of examples. No amount of additional mini calls resolves this, which motivates the blending approach in Section 3.5.2: rather than treating mini as a noisy approximation to full, we treat them as complementary estimators with partially independent biases.
+Mini agreement approaches ~79% by $k=5$. The ceiling is not a data limitation — it reflects genuine systematic disagreement between the two models on ~20% of examples. No amount of additional mini calls resolves this, which motivates the blending approach in Section 3.5.2: rather than treating mini as a noisy approximation to full, we treat them as complementary estimators with partially independent biases.
 
 Nano shows a qualitatively similar pattern but with a lower ceiling: agreement rises from ~50% at k=1 to ~70% at k=8, with Spearman rank correlation plateauing around 0.67 (vs 0.79 for mini). The larger gap confirms a meaningful capability difference — nano disagrees with full on ~30% of examples even with maximum ensembling, compared to ~20% for mini.
 
@@ -467,7 +467,7 @@ This suggests that for practitioners adopting LLM judges, the highest-value inte
 
 ### Reproducibility
 
-All experiments were conducted via Azure OpenAI API version `2025-04-01-preview` using GPT-5.4 and GPT-5.4 mini deployments. Data was collected in March–April 2026. All API calls use temperature 1.0 with no seed parameter, so individual scores are not deterministically reproducible; however, aggregate accuracy metrics are stable across runs (within the reported bootstrap confidence intervals). Total API spend across all collections and temperature sweeps was approximately $1,200. All collection scripts write results incrementally and support resume; the full dataset can be re-collected by running `bash run_all.sh`.
+All experiments were conducted via Azure OpenAI API version `2025-04-01-preview` using GPT-5.4, GPT-5.4 mini, and GPT-5.4 nano deployments. Data was collected in March–April 2026. All API calls use temperature 1.0 with no seed parameter, so individual scores are not deterministically reproducible; however, aggregate accuracy metrics are stable across runs (within the reported bootstrap confidence intervals). Total API spend across all collections and temperature sweeps was approximately $1,200. All collection scripts write results incrementally and support resume; the full dataset can be re-collected by running `bash run_all.sh`.
 
 ### Future Work
 
