@@ -19,8 +19,10 @@ from scipy import stats
 # --- Pricing ---
 GPT54_INPUT_PER_M = 2.50
 GPT54_OUTPUT_PER_M = 15.00
-GPT54_MINI_INPUT_PER_M = 0.25
-GPT54_MINI_OUTPUT_PER_M = 1.50
+GPT54_MINI_INPUT_PER_M = 0.75
+GPT54_MINI_OUTPUT_PER_M = 4.50
+GPT54_NANO_INPUT_PER_M = 0.20
+GPT54_NANO_OUTPUT_PER_M = 1.25
 
 RAW_DIR = Path("results/raw")
 TABLES_DIR = Path("results/tables")
@@ -185,24 +187,32 @@ def bootstrap_accuracy_ci(
 # Cost
 # ===================================================================
 
+_PRICING = {
+    "full": (GPT54_INPUT_PER_M, GPT54_OUTPUT_PER_M),
+    "mini": (GPT54_MINI_INPUT_PER_M, GPT54_MINI_OUTPUT_PER_M),
+    "nano": (GPT54_NANO_INPUT_PER_M, GPT54_NANO_OUTPUT_PER_M),
+}
+
+
 def compute_cost(data: list[dict]) -> dict:
     """Compute actual dollar cost from token counts (total collection cost)."""
-    mini_in = mini_out = full_in = full_out = 0
+    totals = {mk: {"in": 0, "out": 0} for mk in _PRICING}
     for r in data:
         c = r.get("cost", {})
-        if "mini_input_tokens" in c:
-            mini_in += c["mini_input_tokens"]
-            mini_out += c["mini_output_tokens"]
-        if "full_input_tokens" in c:
-            full_in += c["full_input_tokens"]
-            full_out += c["full_output_tokens"]
+        for mk in _PRICING:
+            if f"{mk}_input_tokens" in c:
+                totals[mk]["in"] += c[f"{mk}_input_tokens"]
+                totals[mk]["out"] += c[f"{mk}_output_tokens"]
 
-    mini_cost = mini_in / 1e6 * GPT54_MINI_INPUT_PER_M + mini_out / 1e6 * GPT54_MINI_OUTPUT_PER_M
-    full_cost = full_in / 1e6 * GPT54_INPUT_PER_M + full_out / 1e6 * GPT54_OUTPUT_PER_M
-    total = mini_cost + full_cost
+    costs = {}
+    total = 0.0
+    for mk, (inp_rate, out_rate) in _PRICING.items():
+        mk_cost = totals[mk]["in"] / 1e6 * inp_rate + totals[mk]["out"] / 1e6 * out_rate
+        costs[f"{mk}_cost"] = mk_cost
+        total += mk_cost
     n = len(data) or 1
     return {
-        "total_cost": total, "mini_cost": mini_cost, "full_cost": full_cost,
+        "total_cost": total, **costs,
         "cost_per_example": total / n, "n": len(data),
     }
 
@@ -223,25 +233,26 @@ def compute_deployment_cost(
     Output tokens scale linearly with k (the n parameter).
 
     Args:
-        models: "full", "mini", or "both"
+        models: "full", "mini", "nano", "both", or "all"
         k: number of completions per response in the deployed condition
         collection_k: k used during data collection (to scale output tokens)
     """
+    model_keys = {
+        "both": ["mini", "full"],
+        "all": ["nano", "mini", "full"],
+    }.get(models, [models])
+
     n = len(data) or 1
     cost = 0.0
     for r in data:
         c = r.get("cost", {})
-        if models in ("full", "both"):
-            inp = c.get("full_input_tokens", 0)
-            out = c.get("full_output_tokens", 0)
+        for mk in model_keys:
+            inp_rate, out_rate = _PRICING[mk]
+            inp = c.get(f"{mk}_input_tokens", 0)
+            out = c.get(f"{mk}_output_tokens", 0)
             # Output tokens scale with k; input charged once
             scaled_out = out * k / collection_k
-            cost += inp / 1e6 * GPT54_INPUT_PER_M + scaled_out / 1e6 * GPT54_OUTPUT_PER_M
-        if models in ("mini", "both"):
-            inp = c.get("mini_input_tokens", 0)
-            out = c.get("mini_output_tokens", 0)
-            scaled_out = out * k / collection_k
-            cost += inp / 1e6 * GPT54_MINI_INPUT_PER_M + scaled_out / 1e6 * GPT54_MINI_OUTPUT_PER_M
+            cost += inp / 1e6 * inp_rate + scaled_out / 1e6 * out_rate
     return cost / n
 
 
@@ -593,36 +604,42 @@ def optimise_var_informed(
 # Mini-full convergence
 # ===================================================================
 
-def compute_ensemble_convergence(data: list[dict]) -> dict:
-    if not data or "mini_scores" not in data[0]:
+def compute_ensemble_convergence(
+    data: list[dict], cheap_model: str = "mini", reference_model: str = "full",
+) -> dict:
+    score_key = f"{cheap_model}_scores"
+    ref_key = f"{reference_model}_scores"
+    # Filter to examples that have both model scores
+    data = [r for r in data if score_key in r and ref_key in r]
+    if not data:
         return {"by_k": []}
 
-    max_k = min(len(r["mini_scores"][0]) for r in data)
-    full_winners = {}
+    max_k = min(len(r[score_key][0]) for r in data)
+    ref_winners = {}
     for r in data:
-        means = [_mean_ignoring_none(s) for s in r["full_scores"]]
+        means = [_mean_ignoring_none(s) for s in r[ref_key]]
         if any(m is None for m in means):
             continue
         max_s = max(means)
         w = [i for i, m in enumerate(means) if m == max_s]
-        full_winners[r["id"]] = {"winner": w[0] if len(w) == 1 else -1, "means": means}
+        ref_winners[r["id"]] = {"winner": w[0] if len(w) == 1 else -1, "means": means}
 
     by_k = []
     for k in range(1, max_k + 1):
         agreements, rank_corrs = [], []
         for r in data:
-            if r["id"] not in full_winners:
+            if r["id"] not in ref_winners:
                 continue
-            mini_means = [_mean_ignoring_none(s[:k]) for s in r["mini_scores"]]
-            if any(m is None for m in mini_means):
+            cheap_means = [_mean_ignoring_none(s[:k]) for s in r[score_key]]
+            if any(m is None for m in cheap_means):
                 continue
-            max_m = max(mini_means)
-            mw = [i for i, m in enumerate(mini_means) if m == max_m]
-            mini_winner = mw[0] if len(mw) == 1 else -1
-            fw = full_winners[r["id"]]
-            agreements.append(1 if mini_winner == fw["winner"] and mini_winner != -1 else 0)
-            if len(mini_means) >= 3:
-                rho, _ = stats.spearmanr(mini_means, fw["means"])
+            max_m = max(cheap_means)
+            mw = [i for i, m in enumerate(cheap_means) if m == max_m]
+            cheap_winner = mw[0] if len(mw) == 1 else -1
+            fw = ref_winners[r["id"]]
+            agreements.append(1 if cheap_winner == fw["winner"] and cheap_winner != -1 else 0)
+            if len(cheap_means) >= 3:
+                rho, _ = stats.spearmanr(cheap_means, fw["means"])
                 if not np.isnan(rho):
                     rank_corrs.append(float(rho))
 
@@ -667,13 +684,34 @@ def main():
                 return key, data
         return None
 
-    base = _find("base_both")
-    criteria = _find("criteria_both")
-    cal_low = _find("cal-low_both")
-    cal_high = _find("cal-high_both")
-    cal_both = _find("cal-both_both")
-    cal_cross = _find("cal-cross_both")
-    combined = _find("combined_both")
+    base = _find("base_both") or _find("base_all")
+    criteria = _find("criteria_both") or _find("criteria_all")
+    cal_low = _find("cal-low_both") or _find("cal-low_all")
+    cal_high = _find("cal-high_both") or _find("cal-high_all")
+    cal_both = _find("cal-both_both") or _find("cal-both_all")
+    cal_cross = _find("cal-cross_both") or _find("cal-cross_all")
+    combined = _find("combined_both") or _find("combined_all")
+
+    # Merge standalone nano collection into base if present
+    base_nano = _find("base_nano")
+    if base and base_nano and "nano_scores" not in base[1][0]:
+        nano_by_id = {r["id"]: r for r in base_nano[1]}
+        merged = []
+        n_with_nano = 0
+        for r in base[1]:
+            nr = nano_by_id.get(r["id"])
+            if nr:
+                r = {**r}
+                r["nano_scores"] = nr["nano_scores"]
+                r["nano_errors"] = nr["nano_errors"]
+                r["cost"] = {**r.get("cost", {})}
+                for tk in ("nano_input_tokens", "nano_output_tokens"):
+                    if tk in nr.get("cost", {}):
+                        r["cost"][tk] = nr["cost"][tk]
+                n_with_nano += 1
+            merged.append(r)
+        print(f"Merged nano scores into base: {n_with_nano} / {len(base[1])} examples")
+        base = (base[0], merged)
 
     # Temperature sweep files (new format only)
     temp_files = {}
@@ -741,6 +779,20 @@ def main():
         all_metrics["mini_k1"] = m
         print(f"  Mini k=1: {m['accuracy']['overall']:.3f}")
 
+        # Nano conditions (if nano scores are present)
+        if any("nano_scores" in r for r in data):
+            m = _condition_metrics("Nano k=8", data, "nano", k=8,
+                                  deploy_models="nano", deploy_k=8)
+            all_metrics["nano_k8"] = m
+            print(f"  Nano k=8: {m['accuracy']['overall']:.3f} "
+                  f"[{m['accuracy_ci']['overall']['ci_low']:.3f}, {m['accuracy_ci']['overall']['ci_high']:.3f}]"
+                  f"  ${m['cost']['cost_per_example']:.4f}/ex")
+
+            m = _condition_metrics("Nano k=1", data, "nano", k=1,
+                                  deploy_models="nano", deploy_k=1)
+            all_metrics["nano_k1"] = m
+            print(f"  Nano k=1: {m['accuracy']['overall']:.3f}")
+
         # Diminishing returns
         dim = {}
         for k_sub in range(1, 9):
@@ -752,7 +804,15 @@ def main():
             a = compute_accuracy(data, model="mini", k_subset=k_sub)
             dim_mini[k_sub] = a["overall"]
         all_metrics["diminishing_returns_mini"] = dim_mini
+        if any("nano_scores" in r for r in data):
+            dim_nano = {}
+            for k_sub in range(1, 9):
+                a = compute_accuracy(data, model="nano", k_subset=k_sub)
+                dim_nano[k_sub] = a["overall"]
+            all_metrics["diminishing_returns_nano"] = dim_nano
         print(f"  Diminishing returns (full): {' '.join(f'k={k}:{v:.3f}' for k, v in dim.items())}")
+        if "diminishing_returns_nano" in all_metrics:
+            print(f"  Diminishing returns (nano): {' '.join(f'k={k}:{v:.3f}' for k, v in all_metrics['diminishing_returns_nano'].items())}")
 
         # Variance metrics
         var = compute_variance_metrics(data, model="full")
@@ -779,8 +839,12 @@ def main():
             if vie["test_best_constrained"]:
                 print(f"    Var-informed (<=2 calls): test={vie['test_best_constrained']['accuracy']:.3f}")
 
-            conv = compute_ensemble_convergence(data)
+            conv = compute_ensemble_convergence(data, cheap_model="mini")
             all_metrics["convergence"] = conv
+
+            if any("nano_scores" in r for r in data):
+                conv_nano = compute_ensemble_convergence(data, cheap_model="nano")
+                all_metrics["convergence_nano"] = conv_nano
 
     # 2. From criteria collection
     if criteria:

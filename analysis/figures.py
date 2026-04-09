@@ -37,6 +37,7 @@ COLORS = {
     "Calibration (both)": "#937860",
     "Calibration (cross)": "#DA8BC3",
     "Mini k=8": "#CCB974",
+    "Nano k=8": "#64B5F6",
     "Soft blend": "#E5AE38",
     "Combined": "#B07AA1",
     "Criteria k=8": "#76B7B2",
@@ -61,11 +62,41 @@ def _load_metrics():
 
 
 def _find_collection(prefix: str) -> list[dict] | None:
-    for f in sorted(RAW_DIR.glob(f"{prefix}*.jsonl")):
-        data = load_collection(f)
-        if data:
-            return data
+    # Try _all first (includes nano), then fall back to any match
+    for suffix in ["_all", "_both", ""]:
+        for f in sorted(RAW_DIR.glob(f"{prefix}{suffix}*.jsonl")):
+            data = load_collection(f)
+            if data:
+                return _merge_nano(data, prefix)
     return None
+
+
+def _merge_nano(data: list[dict], prefix: str) -> list[dict]:
+    """Merge standalone nano collection into data if present and needed."""
+    if data and any("nano_scores" in r for r in data):
+        return data
+    # Strip model suffix to get the base prefix (e.g., "base_both" -> "base")
+    base_prefix = prefix.split("_")[0] if "_" in prefix else prefix
+    nano_files = sorted(RAW_DIR.glob(f"{base_prefix}_nano*.jsonl"))
+    if not nano_files:
+        return data
+    nano_data = load_collection(nano_files[0])
+    if not nano_data:
+        return data
+    nano_by_id = {r["id"]: r for r in nano_data}
+    merged = []
+    for r in data:
+        nr = nano_by_id.get(r["id"])
+        if nr:
+            r = {**r}
+            r["nano_scores"] = nr["nano_scores"]
+            r["nano_errors"] = nr["nano_errors"]
+            r["cost"] = {**r.get("cost", {})}
+            for tk in ("nano_input_tokens", "nano_output_tokens"):
+                if tk in nr.get("cost", {}):
+                    r["cost"][tk] = nr["cost"][tk]
+        merged.append(r)
+    return merged
 
 
 # ===================================================================
@@ -82,6 +113,7 @@ def plot_hero_accuracy(metrics):
         ("cal_low", "Calibration (low)"),
         ("ensemble_k8", "Ensemble k=8"),
         ("mini_k8", "Mini k=8"),
+        ("nano_k8", "Nano k=8"),
         ("criteria_k8", "Criteria k=8"),
         ("combined", "Combined"),
     ]
@@ -134,6 +166,7 @@ def plot_pareto_frontier(metrics):
     for key, label in [("baseline", "Baseline"), ("criteria", "Criteria (k=1)"),
                        ("criteria_k8", "Criteria k=8"),
                        ("ensemble_k8", "Ensemble k=8"), ("mini_k8", "Mini k=8"),
+                       ("nano_k8", "Nano k=8"),
                        ("cal_low", "Calibration (low)"),
                        ("combined", "Combined")]:
         m = metrics.get(key)
@@ -202,6 +235,11 @@ def plot_diminishing_returns(metrics):
         accs_mini = [dr_mini[str(k)] for k in ks]
         ax.plot(ks, accs_mini, "r-s", lw=2, ms=6, label="Mini (GPT-5.4 mini)")
 
+    dr_nano = metrics.get("diminishing_returns_nano")
+    if dr_nano:
+        accs_nano = [dr_nano[str(k)] for k in ks]
+        ax.plot(ks, accs_nano, "g-^", lw=2, ms=6, label="Nano (GPT-5.4 nano)")
+
     ax.axhline(0.25, color="gray", linestyle="--", lw=0.8, label="Random")
     ax.set_xlabel("Ensemble size (k)")
     ax.set_ylabel("Accuracy")
@@ -268,6 +306,13 @@ def plot_variance_correlation(metrics):
 
     from scipy import stats as sp_stats
 
+    has_nano = data and any("nano_scores" in r for r in data)
+    n_plots = 2 if has_nano else 1
+    fig, axes = plt.subplots(1, n_plots, figsize=(8 * n_plots, 8))
+    if n_plots == 1:
+        axes = [axes]
+
+    # Mini vs Full
     mini_vars, full_vars = [], []
     for r in data:
         if "mini_scores" not in r or "full_scores" not in r:
@@ -278,23 +323,48 @@ def plot_variance_correlation(metrics):
             mini_vars.append(float(np.var(mv)))
             full_vars.append(float(np.var(fv)))
 
-    if len(mini_vars) < 3:
-        print("  Skipping variance correlation: insufficient data")
-        return
+    if len(mini_vars) >= 3:
+        corr, _ = sp_stats.pearsonr(mini_vars, full_vars)
+        clip = float(np.percentile(mini_vars + full_vars, 99))
+        ax = axes[0]
+        ax.scatter(mini_vars, full_vars, alpha=0.4, s=20, c="#4C72B0")
+        ax.plot([0, clip * 1.1], [0, clip * 1.1], "r--", alpha=0.5, lw=1, label="y = x")
+        ax.set_xlabel("Mini model score variance")
+        ax.set_ylabel("Full model score variance")
+        ax.set_title(f"Mini vs Full (r = {corr:.3f})")
+        ax.legend()
+        ax.set_xlim(0, clip * 1.1)
+        ax.set_ylim(0, clip * 1.1)
+        ax.set_aspect("equal")
 
-    corr, _ = sp_stats.pearsonr(mini_vars, full_vars)
-    clip = float(np.percentile(mini_vars + full_vars, 99))
+    # Nano vs Full
+    if has_nano:
+        nano_vars, full_vars_n = [], []
+        for r in data:
+            if "nano_scores" not in r or "full_scores" not in r:
+                continue
+            nv = [s for s in r["nano_scores"][0] if s is not None]
+            fv = [s for s in r["full_scores"][0] if s is not None]
+            if len(nv) > 1 and len(fv) > 1:
+                nano_vars.append(float(np.var(nv)))
+                full_vars_n.append(float(np.var(fv)))
 
-    fig, ax = plt.subplots(figsize=(8, 8))
-    ax.scatter(mini_vars, full_vars, alpha=0.4, s=20, c="#4C72B0")
-    ax.plot([0, clip * 1.1], [0, clip * 1.1], "r--", alpha=0.5, lw=1, label="y = x")
-    ax.set_xlabel("Mini model score variance")
-    ax.set_ylabel("Full model score variance")
-    ax.set_title(f"Score Variance Correlation (r = {corr:.3f})")
-    ax.legend()
-    ax.set_xlim(0, clip * 1.1)
-    ax.set_ylim(0, clip * 1.1)
-    ax.set_aspect("equal")
+        if len(nano_vars) >= 3:
+            corr_n, _ = sp_stats.pearsonr(nano_vars, full_vars_n)
+            clip_n = float(np.percentile(nano_vars + full_vars_n, 99))
+            ax = axes[1]
+            ax.scatter(nano_vars, full_vars_n, alpha=0.4, s=20, c="#55A868")
+            ax.plot([0, clip_n * 1.1], [0, clip_n * 1.1], "r--", alpha=0.5, lw=1, label="y = x")
+            ax.set_xlabel("Nano model score variance")
+            ax.set_ylabel("Full model score variance")
+            ax.set_title(f"Nano vs Full (r = {corr_n:.3f})")
+            ax.legend()
+            ax.set_xlim(0, clip_n * 1.1)
+            ax.set_ylim(0, clip_n * 1.1)
+            ax.set_aspect("equal")
+
+    fig.suptitle("Score Variance Correlation", fontsize=14, y=1.02)
+    fig.tight_layout()
     _save(fig, "variance_correlation")
 
 
@@ -368,7 +438,7 @@ def plot_escalation_pareto(metrics):
         ax.plot(fx, fy, c="#4C72B0", lw=2, label="Pareto frontier")
     ax.axhline(full_acc, color="gray", ls=":", alpha=0.7, label=f"Full k=8 ({full_acc:.1%})")
     ax.axhline(mini_acc, color="orange", ls=":", alpha=0.7, label=f"Mini k=8 ({mini_acc:.1%})")
-    ax.set_xlabel("Cost ratio")
+    ax.set_xlabel("Cost (fraction of full k=8)")
     ax.set_ylabel("Accuracy")
     ax.set_title("Hard Escalation: Accuracy vs Cost")
     ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f"{y:.0%}"))
@@ -413,7 +483,7 @@ def plot_var_informed(metrics):
         ax.scatter([tbc.get("mean_n2", 0) / 8], [tbc["accuracy"]],
                    s=120, c="green", marker="*", zorder=6, label=f"Budget ({tbc['accuracy']:.1%})")
 
-    ax.set_xlabel("Cost ratio")
+    ax.set_xlabel("Cost (fraction of full k=8)")
     ax.set_ylabel("Accuracy")
     ax.set_title("Variance-Informed Ensembling")
     ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f"{y:.0%}"))
@@ -432,27 +502,41 @@ def plot_convergence(metrics):
         print("  Skipping convergence: no data")
         return
 
+    conv_nano = metrics.get("convergence_nano")
+
     ks = [e["k"] for e in conv["by_k"]]
     agr = [e["agreement"] for e in conv["by_k"]]
     rcs = [e.get("rank_correlation") for e in conv["by_k"]]
 
     fig, ax1 = plt.subplots(figsize=(8, 5))
-    ax1.plot(ks, agr, "b-o", lw=2, ms=6, label="Agreement")
-    ax1.set_xlabel("Mini ensemble size (k)")
-    ax1.set_ylabel("Agreement with full model", color="b")
+    ax1.plot(ks, agr, "b-o", lw=2, ms=6, label="Mini agreement")
+    ax1.set_xlabel("Ensemble size (k)")
+    ax1.set_ylabel("Agreement with full model")
     ax1.set_xticks(range(1, max(ks) + 1))
-    ax1.set_ylim(0.5, 1.0)
+    ax1.set_ylim(0.4, 1.0)
     ax1.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f"{y:.0%}"))
+
+    if conv_nano and conv_nano.get("by_k"):
+        nano_ks = [e["k"] for e in conv_nano["by_k"]]
+        nano_agr = [e["agreement"] for e in conv_nano["by_k"]]
+        ax1.plot(nano_ks, nano_agr, "g-^", lw=2, ms=6, label="Nano agreement")
 
     valid_rcs = [(k, r) for k, r in zip(ks, rcs) if r is not None]
     if valid_rcs:
         ax2 = ax1.twinx()
         ax2.plot([k for k, r in valid_rcs], [r for k, r in valid_rcs],
-                 "r--s", lw=2, ms=6, label="Rank correlation")
-        ax2.set_ylabel("Spearman rank correlation", color="r")
-        ax2.set_ylim(0.5, 1.0)
+                 "b--s", lw=1, ms=4, alpha=0.5, label="Mini rank corr")
+        ax2.set_ylabel("Spearman rank correlation")
+        ax2.set_ylim(0.4, 1.0)
 
-    ax1.set_title("Mini-Full Model Agreement vs Ensemble Size")
+        if conv_nano and conv_nano.get("by_k"):
+            nano_rcs = [(e["k"], e.get("rank_correlation")) for e in conv_nano["by_k"]]
+            valid_nano_rcs = [(k, r) for k, r in nano_rcs if r is not None]
+            if valid_nano_rcs:
+                ax2.plot([k for k, r in valid_nano_rcs], [r for k, r in valid_nano_rcs],
+                         "g--D", lw=1, ms=4, alpha=0.5, label="Nano rank corr")
+
+    ax1.set_title("Model Agreement with Full (k=8) vs Ensemble Size")
     lines1, labels1 = ax1.get_legend_handles_labels()
     if valid_rcs:
         lines2, labels2 = ax2.get_legend_handles_labels()
