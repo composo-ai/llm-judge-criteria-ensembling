@@ -316,7 +316,7 @@ Parameters $(\sigma_1, \sigma_2)$ are found by grid search over the 15th–95th 
 The **budget-constrained** variant restricts mean $n_{\text{full}} \leq 2.0$, achieving 74.9% on the test set at 1.6× baseline cost. This is barely above the baseline (71.7%) and far below mini k=8 (79.2% at 1.2× cost), suggesting that **variance-informed routing does not improve on simpler approaches at comparable cost**.
 
 ![Variance-Informed Ensembling](figures/variance_informed_ensembling.png)
-*Figure 6: Pareto frontier for per-response variance-informed ensembling (black) vs fixed-k full model (blue). The frontier and gray grid points show train-set accuracy (80% of data); the two stars show test-set accuracy (held-out 20%) for the best overall (red, 81.0%) and budget-constrained (green, 74.9%) configurations. The stars fall below the frontier because they reflect out-of-sample performance.*
+*Figure 6: Pareto frontier for per-response variance-informed ensembling. The black line is the Pareto frontier and gray points show the full grid of (threshold, n_full) configurations (train-set accuracy, 80% of data). The two stars show test-set accuracy (held-out 20%) for the best overall (red, 81.0%) and budget-constrained (green, 74.9%) configurations.*
 
 **Summary of escalation strategies** (costs relative to k=1 full model baseline at $0.0133/example):
 

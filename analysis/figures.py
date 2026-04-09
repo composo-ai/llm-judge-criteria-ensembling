@@ -438,7 +438,7 @@ def plot_escalation_pareto(metrics):
         ax.plot(fx, fy, c="#4C72B0", lw=2, label="Pareto frontier")
     ax.axhline(full_acc, color="gray", ls=":", alpha=0.7, label=f"Full k=8 ({full_acc:.1%})")
     ax.axhline(mini_acc, color="orange", ls=":", alpha=0.7, label=f"Mini k=8 ({mini_acc:.1%})")
-    ax.set_xlabel("Cost ratio")
+    ax.set_xlabel("Cost (fraction of full k=8)")
     ax.set_ylabel("Accuracy")
     ax.set_title("Hard Escalation: Accuracy vs Cost")
     ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f"{y:.0%}"))
@@ -483,7 +483,7 @@ def plot_var_informed(metrics):
         ax.scatter([tbc.get("mean_n2", 0) / 8], [tbc["accuracy"]],
                    s=120, c="green", marker="*", zorder=6, label=f"Budget ({tbc['accuracy']:.1%})")
 
-    ax.set_xlabel("Cost ratio")
+    ax.set_xlabel("Cost (fraction of full k=8)")
     ax.set_ylabel("Accuracy")
     ax.set_title("Variance-Informed Ensembling")
     ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f"{y:.0%}"))
