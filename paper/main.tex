@@ -64,6 +64,19 @@ We investigate five candidate techniques for improving judge accuracy:
 We find that criteria injection and ensembling account for nearly all available gains, while calibration, model routing, and soft blending do not reliably improve on this simpler baseline. We report both positive and negative results, as the failures are as informative as the successes for practitioners deciding which techniques to invest in. All experiments are conducted with GPT-5.4 (full), GPT-5.4 mini, and GPT-5.4 nano via Azure OpenAI.
 
 %----------------------------------------------------------
+\section{Related Work}
+\label{sec:related-work}
+%----------------------------------------------------------
+
+\paragraph{LLM-as-judge.} Using language models as evaluators of other language model outputs was formalised by \citet{zheng2023judging}, who introduced MT-Bench and Chatbot Arena to study LLM judges systematically. They showed that strong LLMs (e.g., GPT-4) can achieve high agreement with human preferences in pairwise comparisons, establishing LLM-as-judge as a practical alternative to human evaluation. Subsequent work has identified systematic biases in LLM judges, including position bias, verbosity bias, and self-enhancement bias \citep{wang2023large,zheng2023judging}. Our work addresses judge reliability through prompt-level and aggregation-level interventions rather than debiasing.
+
+\paragraph{Evaluation benchmarks.} RewardBench \citep{lambert2024rewardbench} introduced a standardised benchmark for evaluating reward models and LLM judges across diverse categories. RewardBench~2 extends this with a four-response rating protocol (rather than pairwise), covering Factuality, Focus, Mathematics, Precise~IF, and Safety. We use RewardBench~2 as our evaluation testbed because its multi-response format and category diversity stress-test judge discrimination more than pairwise setups.
+
+\paragraph{Ensemble methods for LLM evaluation.} Ensemble scoring --- aggregating multiple stochastic samples from a model --- is a well-known variance reduction technique in machine learning. In the LLM evaluation setting, \citet{verga2024replacing} showed that aggregating multiple LLM judge responses improves agreement with human annotations, consistent with our finding that ensembling is the single largest source of accuracy gain. Our contribution is a systematic cost--accuracy analysis across ensemble sizes, model tiers, and complementary prompt techniques.
+
+\paragraph{Prompt engineering for evaluation.} Task-specific prompting has been widely studied for improving LLM performance on downstream tasks. In the judge setting, prior work has explored chain-of-thought evaluation \citep{li2024generative}, reference-guided scoring, and rubric-based assessment. Our criteria injection approach is deliberately minimal --- a single sentence per category --- to isolate the effect of task-specific focus from more complex prompt engineering.
+
+%----------------------------------------------------------
 \section{Experimental Setup}
 \label{sec:setup}
 %----------------------------------------------------------
@@ -702,6 +715,9 @@ Three additional techniques we investigated did not reliably improve on criteria
 \end{enumerate}
 
 The practical recommendation for practitioners is simple: write a task-specific criterion and set $k{=}3$--$8$. Neither requires finetuning --- they are drop-in additions to any existing LLM judge pipeline.
+
+\bibliographystyle{plainnat}
+\bibliography{references}
 
 %----------------------------------------------------------
 \appendix

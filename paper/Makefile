@@ -2,7 +2,9 @@ MAIN = main
 
 all: $(MAIN).pdf
 
-$(MAIN).pdf: $(MAIN).tex
+$(MAIN).pdf: $(MAIN).tex references.bib
+	pdflatex $(MAIN)
+	bibtex $(MAIN)
 	pdflatex $(MAIN)
 	pdflatex $(MAIN)
 
