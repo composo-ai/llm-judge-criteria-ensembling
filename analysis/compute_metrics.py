@@ -1267,6 +1267,68 @@ def main():
         for name, t in tr.items():
             print(f"    {name}: {t['n_tied']}/{t['n']} = {t['tie_rate']:.3f}")
 
+    # === 8. Claude generalisability experiments ===
+    claude_base = _find("base_claude_both")
+    claude_criteria = _find("criteria_claude_both")
+
+    if claude_base or claude_criteria:
+        print(f"\n{'='*60}")
+        print("CLAUDE CONDITIONS")
+        print(f"{'='*60}")
+
+    def _claude_condition_metrics(name, data, model="full", k=None):
+        """Like _condition_metrics but with $0 cost (Pro Max subscription)."""
+        acc = compute_accuracy(data, model=model, k_subset=k)
+        ci = bootstrap_accuracy_ci(data, model=model, k_subset=k)
+        return {
+            "name": name, "n": acc["n"],
+            "accuracy": acc, "accuracy_ci": ci,
+            "cost": {"cost_per_example": 0.0},
+        }
+
+    if claude_base:
+        key, data = claude_base
+        for model_label, model_key in [("Sonnet 4.6", "full"), ("Haiku 4.5", "mini")]:
+            m = _claude_condition_metrics(
+                f"Claude {model_label} Baseline k=1", data, model_key, k=1)
+            all_metrics[f"claude_{model_key}_baseline"] = m
+            print(f"\n  Claude {model_label} Baseline k=1: {m['accuracy']['overall']:.3f} "
+                  f"[{m['accuracy_ci']['overall']['ci_low']:.3f}, "
+                  f"{m['accuracy_ci']['overall']['ci_high']:.3f}]  n={m['n']}")
+
+            m = _claude_condition_metrics(
+                f"Claude {model_label} Ensemble k=8", data, model_key, k=8)
+            all_metrics[f"claude_{model_key}_ensemble_k8"] = m
+            print(f"  Claude {model_label} Ensemble k=8: {m['accuracy']['overall']:.3f} "
+                  f"[{m['accuracy_ci']['overall']['ci_low']:.3f}, "
+                  f"{m['accuracy_ci']['overall']['ci_high']:.3f}]")
+
+            # Diminishing returns
+            dim = {}
+            for k_sub in range(1, 9):
+                a = compute_accuracy(data, model=model_key, k_subset=k_sub)
+                dim[k_sub] = a["overall"]
+            all_metrics[f"claude_diminishing_returns_{model_key}"] = dim
+            print(f"  Claude {model_label} diminishing returns: "
+                  f"{' '.join(f'k={k}:{v:.3f}' for k, v in dim.items())}")
+
+    if claude_criteria:
+        key, data = claude_criteria
+        for model_label, model_key in [("Sonnet 4.6", "full"), ("Haiku 4.5", "mini")]:
+            m = _claude_condition_metrics(
+                f"Claude {model_label} Criteria k=1", data, model_key, k=1)
+            all_metrics[f"claude_{model_key}_criteria"] = m
+            print(f"\n  Claude {model_label} Criteria k=1: {m['accuracy']['overall']:.3f} "
+                  f"[{m['accuracy_ci']['overall']['ci_low']:.3f}, "
+                  f"{m['accuracy_ci']['overall']['ci_high']:.3f}]  n={m['n']}")
+
+            m = _claude_condition_metrics(
+                f"Claude {model_label} Criteria k=8", data, model_key, k=8)
+            all_metrics[f"claude_{model_key}_criteria_k8"] = m
+            print(f"  Claude {model_label} Criteria k=8: {m['accuracy']['overall']:.3f} "
+                  f"[{m['accuracy_ci']['overall']['ci_low']:.3f}, "
+                  f"{m['accuracy_ci']['overall']['ci_high']:.3f}]")
+
     # --- Save ---
     output = TABLES_DIR / "all_metrics.json"
     with open(output, "w") as f:
