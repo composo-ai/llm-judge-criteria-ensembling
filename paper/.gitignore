@@ -7,3 +7,4 @@
 *.fls
 *.fdb_latexmk
 *.synctex.gz
+# Note: main.pdf is tracked intentionally
