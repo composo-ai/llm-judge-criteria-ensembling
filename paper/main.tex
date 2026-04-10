@@ -1,5 +1,6 @@
 \documentclass{article}
 \usepackage[preprint]{neurips_2024}
+\setcitestyle{numbers}
 
 \usepackage{amsmath,amssymb}
 \usepackage{graphicx}
@@ -46,9 +47,9 @@ LLM-as-judge --- using a language model to score or rank candidate responses ---
 \label{sec:introduction}
 %----------------------------------------------------------
 
-LLM-as-judge has emerged as the dominant approach for scalable automated evaluation of language model outputs~\citep{zheng2023judging}. A judge model rates or ranks candidate responses, providing a signal that can be used for reward modelling, benchmarking, or direct feedback in post-training pipelines. Beyond training, LLM judges are increasingly deployed in production systems --- as offline test suites that gate releases on output quality, and as real-time monitors that flag regressions or policy violations in deployed applications. Despite this wide adoption, the reliability of LLM judges varies considerably across prompting strategies and aggregation methods.
+LLM-as-judge has emerged as the dominant approach for scalable automated evaluation of language model outputs. A judge model rates or ranks candidate responses, providing a signal that can be used for reward modelling, benchmarking, or direct feedback in post-training pipelines. Beyond training, LLM judges are increasingly deployed in production systems --- as offline test suites that gate releases on output quality, and as real-time monitors that flag regressions or policy violations in deployed applications. Despite this wide adoption, the reliability of LLM judges varies considerably across prompting strategies and aggregation methods.
 
-RewardBench~2 (RB2)~\citep{lambert2024rewardbench} provides a standardised evaluation of judge quality across five categories: Factuality, Focus, Mathematics, Precise~IF, and Safety. Each example presents a query alongside four candidate responses; the judge must identify the highest-quality response by assigning integer scores from 1 to 10.
+RewardBench~2 (RB2) provides a standardised evaluation of judge quality across five categories: Factuality, Focus, Mathematics, Precise~IF, and Safety. Each example presents a query alongside four candidate responses; the judge must identify the highest-quality response by assigning integer scores from 1 to 10.
 
 We investigate five candidate techniques for improving judge accuracy:
 
@@ -701,9 +702,6 @@ Three additional techniques we investigated did not reliably improve on criteria
 \end{enumerate}
 
 The practical recommendation for practitioners is simple: write a task-specific criterion and set $k{=}3$--$8$. Neither requires finetuning --- they are drop-in additions to any existing LLM judge pipeline.
-
-\bibliographystyle{plainnat}
-\bibliography{references}
 
 %----------------------------------------------------------
 \appendix
