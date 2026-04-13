@@ -50,7 +50,7 @@ LLM-as-judge --- using a language model to score or rank candidate responses ---
 
 LLM-as-judge has emerged as the dominant approach for scalable automated evaluation of language model outputs. A judge model rates or ranks candidate responses, providing a signal that can be used for reward modelling and benchmarking. Beyond training, LLM judges are increasingly deployed as the optimisation signal for production applications: frameworks such as DSPy \citep{khattab2023dspy} and GEPA \citep{agrawal2025gepa} use LLM judge scores as the objective for automatic prompt optimisation, effectively closing the loop between evaluation and application development. Judges are also deployed as offline test suites that gate releases on output quality, and as real-time monitors that flag regressions or policy violations in deployed applications. Despite this wide adoption, the reliability of LLM judges varies considerably across prompting strategies and aggregation methods.
 
-RewardBench~2 \citep[RB2;][]{malik2025rewardbench2} provides a standardised evaluation of judge quality across five categories: Factuality, Focus, Mathematics, Precise~IF, and Safety. Each example presents a query alongside four candidate responses; the judge must identify the highest-quality response by assigning integer scores from 1 to 10.
+RewardBench~2 (RB2) \citep{malik2025rewardbench2} provides a standardised evaluation of judge quality across five categories: Factuality, Focus, Mathematics, Precise~IF, and Safety. Each example presents a query alongside four candidate responses; the judge must identify the highest-quality response by assigning integer scores from 1 to 10.
 
 We investigate five candidate techniques for improving judge accuracy:
 
