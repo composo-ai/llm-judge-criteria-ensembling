@@ -9,7 +9,7 @@ We systematically tested five techniques for improving LLM judge accuracy on [Re
 
 ## What Works
 
-1. **Ask more than once.** LLM judges give different scores on every call. Request k=8 independent scores and average them — the noise cancels out. **+9.8pp at 5× cost.** Most of the gain comes by k=3.
+1. **Ensembling.** LLM judges give different scores on every call. Request k=8 independent scores and average them — the noise cancels out. **+9.8pp at 5× cost.** Most of the gain comes by k=3.
 
 2. **Try mini models.** GPT-5.4 mini with k=8 achieves 79.2% at **1.2× baseline cost** — at one-quarter the full ensemble's cost. Add criteria and it hits 81.5%.
 
