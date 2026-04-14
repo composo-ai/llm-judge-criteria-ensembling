@@ -143,7 +143,7 @@ def bootstrap_accuracy_ci(
     data: list[dict],
     model: str = "full",
     k_subset: int | None = None,
-    n_bootstrap: int = 500,
+    n_bootstrap: int = 2000,
     alpha: float = 0.05,
     seed: int = 42,
 ) -> dict:
@@ -949,6 +949,27 @@ def main():
                 m = _condition_metrics(name, data, "full", k=1, use_intersection=True)
                 print(f"    {name}: {m['accuracy']['overall']:.3f} (n={m['n']})")
                 all_metrics[f"intersection_{name}"] = m
+
+        # k=8 intersection variants for headline conditions
+        extra_intersection = []
+        if base:
+            extra_intersection += [
+                ("ensemble_k8", base[1], "full", 8),
+                ("mini_k8", base[1], "mini", 8),
+            ]
+        if criteria:
+            extra_intersection += [
+                ("criteria_k8", criteria[1], "full", 8),
+                ("criteria_mini_k8", criteria[1], "mini", 8),
+            ]
+        if cal_low:
+            extra_intersection += [("cal_low_k8", cal_low[1], "full", 8)]
+        if combined:
+            extra_intersection += [("combined_k8", combined[1], "full", 8)]
+        for name, data, model, k in extra_intersection:
+            m = _condition_metrics(name, data, model=model, k=k, use_intersection=True)
+            print(f"    {name}: {m['accuracy']['overall']:.3f} (n={m['n']})")
+            all_metrics[f"intersection_{name}"] = m
 
     # --- Save ---
     output = TABLES_DIR / "all_metrics.json"

@@ -1,11 +1,11 @@
-# A Systematic Evaluation of LLM-as-Judge Improvement Techniques on RewardBench 2
+# An Empirical Investigation of Practical LLM-as-a-Judge Improvement Techniques on RewardBench 2
 
 **Author:** Ryan Lail<br>
 **Affiliation:** Composo AI
 
 We systematically tested five techniques for improving LLM judge accuracy on [RewardBench 2](https://huggingface.co/datasets/allenai/reward-bench-2) and found that three simple, drop-in changes improve accuracy from 71.7% to 83.6%. No fine-tuning required.
 
-**Blog post:** [Improving LLM Judges With Experiments, Not Vibes](https://www.composo.ai/post/llm-judge-criteria-ensembling/) | **Full methodology:** [TECHNICAL_REPORT.md](TECHNICAL_REPORT.md)
+**Blog post:** [Improving LLM Judges With Experiments, Not Vibes](https://www.composo.ai/post/llm-judge-criteria-ensembling/) | **Full methodology:** [TECHNICAL_REPORT.md](TECHNICAL_REPORT.md) | **Paper:** [paper/main.pdf](paper/main.pdf)
 
 ## What Works
 
@@ -72,23 +72,23 @@ All accuracy deltas in percentage points (pp). 95% bootstrap CIs shown. Conditio
 
 | Condition | N | Overall (95% CI) | $/example | vs Baseline |
 |-----------|---|------------------|-----------|-------------|
-| Baseline (full k=1) | 1729 | 71.7% (±2.0pp) | $0.0133 | 1.0× |
-| Criteria (full k=1) | 1738 | 74.7% (±1.9pp) | $0.0140 | 1.1× |
+| Baseline (full k=1) | 1729 | 71.7% (±2.1pp) | $0.0133 | 1.0× |
+| Criteria (full k=1) | 1738 | 74.7% (±2.1pp) | $0.0140 | 1.1× |
 | Ensemble (full k=8) | 1730 | 81.5% (±1.8pp) | $0.0663 | 5.0× |
-| **Criteria (full k=8)** | 1741 | **83.6%** (±1.6pp) | $0.0702 | 5.3× |
-| Mini model k=8 | 1730 | 79.2% (±1.9pp) | $0.0154 | 1.2× |
-| Criteria (mini k=8) | 1742 | 81.5% (±2.0pp) | $0.0160 | 1.2× |
-| Nano model k=8 | 1705 | 71.4% (±2.0pp) | $0.0057 | 0.4× |
-| Nano model k=1 | 1700 | 52.3% (±2.4pp) | $0.0011 | 0.1× |
+| **Criteria (full k=8)** | 1741 | **83.6%** (±1.7pp) | $0.0702 | 5.3× |
+| Mini model k=8 | 1730 | 79.2% (±2.0pp) | $0.0154 | 1.2× |
+| Criteria (mini k=8) | 1742 | 81.5% (±1.9pp) | $0.0160 | 1.2× |
+| Nano model k=8 | 1705 | 71.4% (±2.1pp) | $0.0057 | 0.4× |
+| Nano model k=1 | 1700 | 52.3% (±2.3pp) | $0.0011 | 0.1× |
 
 **Investigated techniques (did not improve on criteria k=8):**
 
 | Condition | N | Overall (95% CI) | $/example | vs Baseline |
 |-----------|---|------------------|-----------|-------------|
-| Calibration low (k=1) | 1737 | 73.8% (±2.0pp) | $0.0198 | 1.5× |
-| Calibration low (k=8) | 1737 | 81.7% (±1.7pp) | $0.0744 | 5.6× |
-| Combined (full k=8) | 1746 | 82.6% (±1.6pp) | $0.0913 | 6.8× |
-| Combined + blend (test) ‡ | ~349 | 84.8% | $0.0913 | 6.8× |
+| Calibration low (k=1) | 1737 | 73.8% (±2.1pp) | $0.0198 | 1.5× |
+| Calibration low (k=8) | 1737 | 81.7% (±1.8pp) | $0.0744 | 5.6× |
+| Combined (full k=8) | 1746 | 82.6% (±1.8pp) | $0.0913 | 6.8× |
+| Combined + blend (test) ‡ | ~348 | 84.8% | $0.0913 | 6.8× |
 
 > **‡** Blend parameters optimised on 80% train split, accuracy on held-out 20%. See report for caveats.
 
