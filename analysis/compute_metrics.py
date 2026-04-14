@@ -143,7 +143,7 @@ def bootstrap_accuracy_ci(
     data: list[dict],
     model: str = "full",
     k_subset: int | None = None,
-    n_bootstrap: int = 500,
+    n_bootstrap: int = 2000,
     alpha: float = 0.05,
     seed: int = 42,
 ) -> dict:
