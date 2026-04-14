@@ -30,7 +30,7 @@
 \title{An Empirical Investigation of Practical LLM-as-a-Judge Improvement Techniques on RewardBench~2}
 
 \author{
-  Ryan Lail \\
+  Ryan Lail\thanks{Code and data: \url{https://github.com/composo-ai/llm-judge-criteria-ensembling}} \\
   Composo AI \\
   \texttt{ryan@composo.ai}
 }
@@ -67,7 +67,7 @@ Our empirical investigation finds that criteria injection and ensembling account
 \paragraph{Contributions.} Our main contributions are:
 \begin{itemize}
   \item A systematic comparison of five candidate techniques for improving LLM judge accuracy, evaluated on 1,753 RewardBench~2 examples across three model tiers (GPT-5.4, GPT-5.4 mini, GPT-5.4 nano).
-  \item Evidence that criteria injection and ensembling account for nearly all available gains, reaching 83.6\% (+11.9pp) at 5.3$\times$ cost, while calibration, model routing, and soft blending do not reliably improve on this simpler baseline.
+  \item Evidence that criteria injection and ensembling account for nearly all available gains, reaching 83.6\% (+11.9pp) at 5.3$\times$ cost, while calibration, model routing, and soft blending do not reliably improve on this simpler baseline at comparable cost.
   \item A cost--accuracy analysis showing that cheaper models benefit disproportionately from ensembling: mini $k{=}8$ matches the full model's single-shot accuracy at 1.2$\times$ cost, and nano $k{=}8$ approaches it at 0.4$\times$ cost.
   \item Empirical results for three further techniques (calibration, escalation, blending) that did not reliably improve on simpler baselines at comparable cost, providing a complete picture of what works in the judge setting.
 \end{itemize}
@@ -481,7 +481,7 @@ Cross-category & 72.4\% & 81.7\% \\
 \end{tabular}
 \end{table}
 
-At $k{=}1$, calibration provides a modest +1--2pp gain. \textbf{At $k{=}8$, calibration adds nothing}: all variants are within $\pm$0.2pp of the vanilla ensemble (81.5\%). The $k{=}8$ ensemble already reduces scoring noise sufficiently that the anchoring benefit of calibration is redundant. Compare with criteria, which provides +2.1pp even at $k{=}8$ (Section~\ref{sec:what-works}).
+At $k{=}1$, calibration provides a modest +1--2pp gain. \textbf{At $k{=}8$, calibration provides no additional benefit beyond ensembling alone}: all variants are within $\pm$0.2pp of the vanilla ensemble (81.5\%). The $k{=}8$ ensemble already reduces scoring noise sufficiently that the anchoring benefit of calibration is redundant. Compare with criteria, which provides +2.1pp even at $k{=}8$ (Section~\ref{sec:what-works}).
 
 \paragraph{Escalation strategies.} Table~\ref{tab:escalation-summary} compares the escalation strategies against the $k{=}1$ full model baseline at \$0.0133/example:
 
@@ -557,7 +557,7 @@ Temperature 1.0 maximises ensemble diversity and the resulting accuracy gain, wh
 \label{fig:temperature}
 \end{figure}
 
-\paragraph{What works and what doesn't.}
+\paragraph{What stacks and what doesn't.}
 \label{sec:what-works}
 The most important finding is what \emph{doesn't} stack. Table~\ref{tab:what-works} shows the full prompt $\times$ model $\times$ $k$ grid (all derived from existing collections):
 
@@ -670,7 +670,7 @@ This suggests that for practitioners adopting LLM judges, the highest-value inte
 
 \paragraph{Reproducibility.}
 
-All experiments were conducted via Azure OpenAI API version \texttt{2025-04-01-preview} using GPT-5.4, GPT-5.4 mini, and GPT-5.4 nano deployments. Data was collected in March--April 2026. All API calls use temperature 1.0 with no seed parameter, so individual scores are not deterministically reproducible; however, aggregate accuracy metrics are stable across runs (within the reported bootstrap confidence intervals). Total API spend across all collections and temperature sweeps was approximately \$1,500. All collection scripts write results incrementally and support resume; the full dataset can be re-collected by running \texttt{bash run\_all.sh}.
+All experiments were conducted via Azure OpenAI API version \texttt{2025-04-01-preview} using GPT-5.4, GPT-5.4 mini, and GPT-5.4 nano deployments. Data was collected in March--April 2026. All API calls use temperature 1.0 with no seed parameter, so individual scores are not deterministically reproducible; however, aggregate accuracy metrics are stable across runs (within the reported bootstrap confidence intervals). Total API spend across all collections and temperature sweeps was approximately \$1,500. All collection scripts write results incrementally and support resume; the full dataset can be re-collected by running \texttt{bash run\_all.sh}. Code and raw data are available at \url{https://github.com/composo-ai/llm-judge-criteria-ensembling}.
 
 \paragraph{Future work.}
 
@@ -686,7 +686,7 @@ All experiments were conducted via Azure OpenAI API version \texttt{2025-04-01-p
 \label{sec:conclusion}
 %----------------------------------------------------------
 
-We evaluated five candidate techniques for improving LLM-as-a-judge accuracy on RewardBench~2. Two of them work:
+We evaluated five candidate techniques for improving LLM-as-a-judge accuracy on RewardBench~2. Two techniques dominate the cost-accuracy tradeoff:
 
 \begin{enumerate}
   \item \textbf{Criteria injection} provides +3.0pp at $k{=}1$ at essentially zero marginal cost. Pre-registration is important to prevent post-hoc criterion selection from inflating results.
@@ -695,7 +695,7 @@ We evaluated five candidate techniques for improving LLM-as-a-judge accuracy on 
 
 For cost-constrained deployments, \textbf{GPT-5.4 mini with $k{=}8$} achieves 79.2\% at 1.2$\times$ baseline cost. \textbf{GPT-5.4 nano with $k{=}8$} (71.4\% at 0.4$\times$ baseline) offers the cheapest path to baseline-level accuracy.
 
-Three additional techniques we investigated did not reliably improve on criteria + ensembling:
+Three additional techniques improved over the baseline but were dominated by criteria + ensembling at comparable or lower cost:
 
 \begin{enumerate}
   \setcounter{enumi}{2}

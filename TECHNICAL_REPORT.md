@@ -1,11 +1,11 @@
-# A Systematic Evaluation of LLM-as-Judge Improvement Techniques on RewardBench 2
+# An Empirical Investigation of Practical LLM-as-a-Judge Improvement Techniques on RewardBench 2
 
 **Author:** Ryan Lail<br>
 **Affiliation:** Composo AI
 
 ## Abstract
 
-LLM-as-judge — using a language model to score or rank candidate responses — is increasingly used as a scalable alternative to human evaluation in RLHF pipelines, benchmarking, offline testing, monitoring, and guardrails. However, the reliability of these judgments depends heavily on how the judge is prompted and how scores are aggregated. We systematically evaluate five candidate techniques for improving GPT-5.4 judge accuracy on RewardBench 2 and find that **two of them account for nearly all available gains**: task-specific criteria injection (+3.0pp at negligible cost) and ensemble scoring (+9.8pp at 5× cost). Combined, a one-sentence category-aware criterion with k=8 ensembling reaches **83.6%** accuracy — a +11.9pp improvement over the 71.7% baseline, and the best result in our study at its cost level. Three additional techniques we investigated — calibration context, adaptive model escalation, and soft blending — did not reliably improve on criteria + ensembling. Adding calibration and dual-model routing actually reduces accuracy to 82.6% compared to criteria k=8 alone. Per-response soft blending shows a +1.7pp in-sample gain that does not hold on a held-out test set (80.2% vs 81.5% for full k=8). We also find that GPT-5.4 mini with k=8 achieves 79.2% at 1.2× baseline cost, and GPT-5.4 nano with k=8 reaches 71.4% at just 0.4× baseline cost, dominating the low-cost Pareto frontier. Neither criteria injection nor ensembling require finetuning — they are drop-in additions to any existing LLM judge pipeline.
+LLM-as-judge — using a language model to score or rank candidate responses — is increasingly used as a scalable alternative to human evaluation in RLHF pipelines, benchmarking, offline testing, monitoring, and guardrails. However, the reliability of these judgments depends heavily on how the judge is prompted and how scores are aggregated. We systematically evaluate five candidate techniques for improving GPT-5.4 judge accuracy on RewardBench 2 and find that **two of them account for nearly all available gains**: task-specific criteria injection (+3.0pp at negligible cost) and ensemble scoring (+9.8pp at 5× cost). Combined, a one-sentence category-aware criterion with k=8 ensembling reaches **83.6%** accuracy — a +11.9pp improvement over the 71.7% baseline, and the best result in our study at its cost level. Three additional techniques we investigated — calibration context, adaptive model escalation, and soft blending — did not reliably improve on criteria + ensembling at comparable cost. Adding calibration and dual-model routing actually reduces accuracy to 82.6% compared to criteria k=8 alone. Per-response soft blending shows a +1.7pp in-sample gain that does not hold on a held-out test set (80.2% vs 81.5% for full k=8). We also find that GPT-5.4 mini with k=8 achieves 79.2% at 1.2× baseline cost, and GPT-5.4 nano with k=8 reaches 71.4% at just 0.4× baseline cost, dominating the low-cost Pareto frontier. Neither criteria injection nor ensembling require finetuning — they are drop-in additions to any existing LLM judge pipeline.
 
 ---
 
@@ -23,7 +23,7 @@ We investigate five candidate techniques for improving judge accuracy:
 4. **Adaptive model escalation** — using a cheaper mini model for easy examples and escalating to a full model when variance is high
 5. **Combination** — applying all techniques simultaneously
 
-We find that criteria injection and ensembling account for nearly all available gains, while calibration, model routing, and soft blending do not reliably improve on this simpler baseline. We report both positive and negative results, as the failures are as informative as the successes for practitioners deciding which techniques to invest in. All experiments are conducted with GPT-5.4 (full), GPT-5.4 mini, and GPT-5.4 nano via Azure OpenAI.
+We find that criteria injection and ensembling account for nearly all available gains, while calibration, model routing, and soft blending do not reliably improve on this simpler baseline at comparable cost. We report both positive and negative results, as the failures are as informative as the successes for practitioners deciding which techniques to invest in. All experiments are conducted with GPT-5.4 (full), GPT-5.4 mini, and GPT-5.4 nano via Azure OpenAI.
 
 ---
 
@@ -235,7 +235,7 @@ We test four variants:
 | Both | 72.8% | 81.5% |
 | Cross-category | 72.4% | 81.7% |
 
-At k=1, calibration provides a modest +1–2pp gain. **At k=8, calibration adds nothing** — all variants are within ±0.2pp of the vanilla ensemble (81.5%). The k=8 ensemble already reduces scoring noise sufficiently that the anchoring benefit of calibration is redundant. Compare with criteria, which provides +2.1pp even at k=8 (Section 5.1).
+At k=1, calibration provides a modest +1–2pp gain. **At k=8, calibration provides no additional benefit beyond ensembling alone** — all variants are within ±0.2pp of the vanilla ensemble (81.5%). The k=8 ensemble already reduces scoring noise sufficiently that the anchoring benefit of calibration is redundant. Compare with criteria, which provides +2.1pp even at k=8 (Section 5.1).
 
 ### 3.5 Adaptive Escalation with Dual-Model Scoring
 
@@ -405,7 +405,7 @@ Refusal-driven sample variation is therefore not driving the reported difference
 
 ## 5. Analysis
 
-### 5.1 What Works and What Doesn't
+### 5.1 What Stacks and What Doesn't
 
 The most important finding is what *doesn't* stack. The full prompt × model × k grid (all derived from existing collections) is:
 
@@ -494,14 +494,14 @@ All experiments were conducted via Azure OpenAI API version `2025-04-01-preview`
 
 ## 7. Conclusion
 
-We evaluated five candidate techniques for improving LLM-as-judge accuracy on RewardBench 2. Two of them work:
+We evaluated five candidate techniques for improving LLM-as-a-judge accuracy on RewardBench 2. Two techniques dominate the cost-accuracy tradeoff:
 
 1. **Criteria injection** provides +3.0pp at k=1 at essentially zero marginal cost. Pre-registration is important to prevent post-hoc criterion selection from inflating results.
 2. **Ensembling** provides +9.8pp at k=8. Diminishing returns set in early: k=3 captures ~70% of the k=8 gain at 3/8 the cost. Combined with criteria, ensembling reaches **83.6%** (+11.9pp) — the best result in the study at its cost level.
 
 For cost-constrained deployments, **GPT-5.4 mini with k=8** achieves 79.2% at 1.2× baseline cost. **GPT-5.4 nano with k=8** (71.4% at 0.4× baseline) offers the cheapest path to baseline-level accuracy.
 
-Three additional techniques we investigated did not reliably improve on criteria + ensembling:
+Three additional techniques improved over the baseline but were dominated by criteria + ensembling at comparable or lower cost:
 
 3. **Calibration context** provides +2pp at k=1 but is dominated by criteria + ensembling at comparable cost. The effect is not category-specific.
 4. **Soft blending** (sigmoid-weighted combination of mini and full model scores) shows an in-sample accuracy gain that does not hold on a held-out test set (80.2% vs 81.5% for full k=8).
