@@ -95,7 +95,7 @@ Our empirical investigation finds that criteria injection and ensembling account
 \subsection{Dataset}
 \label{sec:dataset}
 
-We use RewardBench~2, excluding the Ties subset (which uses a different evaluation protocol). The remaining 1,753 examples span five categories:
+We use RewardBench~2, excluding the Ties subset (which uses a different evaluation protocol). The remaining 1,753 examples span five categories (Table~\ref{tab:dataset}):
 
 \begin{table}[ht]
 \centering
@@ -129,6 +129,8 @@ When running both a mini and a full model (Sections~\ref{sec:escalation}--\ref{s
 
 \subsection{Models and Costs}
 \label{sec:models}
+
+We use three GPT-5.4 model tiers via Azure OpenAI; their per-token pricing is summarised in Table~\ref{tab:models}.
 
 \begin{table}[ht]
 \centering
@@ -212,7 +214,7 @@ This reduces the tie rate dramatically (353 $\to$ 77), since ties require \emph{
 
 \paragraph{Motivation.} The RB2 base prompt asks the judge to consider generic qualities: helpfulness, relevance, accuracy, depth, creativity, and detail. Different categories require different evaluation priorities. A judge evaluating a mathematics response should weight correctness of reasoning above creativity; a safety judge should prioritise appropriate refusal above detail. Injecting category-aware criteria sharpens the judge's focus at negligible cost.
 
-\paragraph{Method.} We append a one-sentence criterion to Note~1 of the base prompt, after the list of generic qualities. Criteria are \textbf{pre-registered} (committed to the repository before any experiment runs) to prevent post-hoc tuning:
+\paragraph{Method.} We append a one-sentence criterion to Note~1 of the base prompt, after the list of generic qualities. Criteria are \textbf{pre-registered} (committed to the repository before any experiment runs) to prevent post-hoc tuning; the full set is shown in Table~\ref{tab:criteria}.
 
 \begin{table}[ht]
 \centering
@@ -277,7 +279,7 @@ Now evaluate the following:
 [Your judgement]
 \end{lstlisting}
 
-We test four variants:
+We test four variants (Table~\ref{tab:cal-variants}):
 
 \begin{table}[ht]
 \centering
@@ -304,7 +306,7 @@ Cross-category & From a \emph{different} category & Control: tests category spec
 
 \paragraph{Variance as an error signal.} Each response's score variance $\sigma_i = \text{std}(s_{i,1}, \ldots, s_{i,k})$ (as defined in Section~\ref{sec:protocol}) serves as the routing signal. Since each judge call is independent, all escalation strategies operate at the per-response level: each response's own variance determines how it is scored, rather than averaging variance across the four responses.
 
-Pearson correlation between per-response variance and correctness (binary) is $r = -0.13$: high variance responses are slightly more likely to be judged incorrectly. Mini and full model variances are positively correlated ($r = 0.421$), validating mini variance as a proxy for full model uncertainty. Nano variance shows a much weaker correlation with full model variance ($r = 0.106$), suggesting that nano's scoring noise is largely independent and its uncertainty is not a useful proxy for the full model's.
+Pearson correlation between per-response variance and correctness (binary) is $r = -0.13$: high variance responses are slightly more likely to be judged incorrectly (Figure~\ref{fig:variance-error}). Mini and full model variances are positively correlated ($r = 0.421$), validating mini variance as a proxy for full model uncertainty. Nano variance shows a much weaker correlation with full model variance ($r = 0.106$), suggesting that nano's scoring noise is largely independent and its uncertainty is not a useful proxy for the full model's (Figure~\ref{fig:variance-corr}).
 
 \begin{figure}[t]
 \centering
@@ -460,7 +462,7 @@ $^{\dagger}$ Combined + blend produces the highest test-set number (84.8\%) but 
 
 \paragraph{Task-specific criteria.} 74.7\% ($\pm$2.1pp) (+3.0pp over baseline), \$0.0140/example (1.1$\times$ baseline cost, a marginal token increase only). Largest gain in Math (+12.0pp); the individual 95\% per-category CIs ($\pm$6.8pp and $\pm$6.4pp) overlap slightly, so this should be read as a directional rather than strictly significant gain at $k{=}1$. With $k{=}8$ ensembling the gap widens (Math: 74.9\% $\to$ 79.2\%) and the broader pattern across categories is robust (see Appendix~\ref{sec:per-cat-ci}). Precise~IF shows a slight regression at $k{=}1$ (32.1\% vs baseline 34.0\%, well within noise), but $k{=}8$ ensembling recovers it to 48.8\%. With $k{=}8$ ensembling, criteria alone reach \textbf{83.6\%}, the most cost-effective high-accuracy condition.
 
-\paragraph{Calibration context.} All variants improve over baseline (+1--2pp). The ``low'' variant (showing a bad example) slightly outperforms ``high'' (73.8\% vs 72.4\%), possibly because the judge finds it easier to distinguish the target from a known-bad anchor. Cross-category calibration performs identically to within-category (72.4\%), suggesting the benefit is context length and anchoring rather than category-specific knowledge.
+\paragraph{Calibration context.} All variants improve over baseline (+1--2pp). The ``low'' variant (showing a bad example) slightly outperforms ``high'' (73.8\% vs 72.4\%), possibly because the judge finds it easier to distinguish the target from a known-bad anchor. Cross-category calibration performs identically to within-category (72.4\%), suggesting the benefit is context length and anchoring rather than category-specific knowledge. Table~\ref{tab:cal-results} shows calibration accuracy at $k{=}1$ and $k{=}8$.
 
 \begin{table}[ht]
 \centering
@@ -481,7 +483,7 @@ Cross-category & 72.4\% & 81.7\% \\
 
 At $k{=}1$, calibration provides a modest +1--2pp gain. \textbf{At $k{=}8$, calibration adds nothing}: all variants are within $\pm$0.2pp of the vanilla ensemble (81.5\%). The $k{=}8$ ensemble already reduces scoring noise sufficiently that the anchoring benefit of calibration is redundant. Compare with criteria, which provides +2.1pp even at $k{=}8$ (Section~\ref{sec:what-works}).
 
-\paragraph{Escalation strategies.} Costs are relative to the $k{=}1$ full model baseline at \$0.0133/example:
+\paragraph{Escalation strategies.} Table~\ref{tab:escalation-summary} compares the escalation strategies against the $k{=}1$ full model baseline at \$0.0133/example:
 
 \begin{table}[ht]
 \centering
@@ -500,9 +502,9 @@ Var-informed ($\leq$2 calls, test set) & 74.9\% & ${\sim}$\$0.022 & 1.6$\times$ 
 \end{tabular}
 \end{table}
 
-On the full dataset (in-sample), soft blending achieves 83.2\% vs 81.5\% for full model $k{=}8$. However, \textbf{on the held-out test set, soft blending (80.2\%) does not beat full $k{=}8$ (81.5\%)}, suggesting the in-sample gain is due to midpoint overfitting. The technique costs 6.1$\times$ baseline (both models at $k{=}8$) and does not justify this cost on out-of-sample data.
+The hard variance routing variant traces a Pareto frontier with a large dead zone in the middle: escalating some but not all responses rarely changes the winner (Figure~\ref{fig:escalation-pareto}). On the full dataset (in-sample), soft blending achieves 83.2\% vs 81.5\% for full model $k{=}8$. However, \textbf{on the held-out test set, soft blending (80.2\%) does not beat full $k{=}8$ (81.5\%)}, suggesting the in-sample gain is due to midpoint overfitting. The technique costs 6.1$\times$ baseline (both models at $k{=}8$) and does not justify this cost on out-of-sample data.
 
-The budget-constrained variance-informed variant restricts mean $n_{\text{full}} \leq 2.0$, achieving 74.9\% on the test set at 1.6$\times$ baseline cost. This is barely above the baseline (71.7\%) and far below mini $k{=}8$ (79.2\% at 1.2$\times$ cost), suggesting that \textbf{variance-informed routing does not improve on simpler approaches at comparable cost}.
+The budget-constrained variance-informed variant restricts mean $n_{\text{full}} \leq 2.0$, achieving 74.9\% on the test set at 1.6$\times$ baseline cost (Figure~\ref{fig:var-informed}). This is barely above the baseline (71.7\%) and far below mini $k{=}8$ (79.2\% at 1.2$\times$ cost), suggesting that \textbf{variance-informed routing does not improve on simpler approaches at comparable cost}.
 
 \paragraph{Combined condition.} 82.6\% accuracy ($\pm$1.8pp) at \$0.0913/example (6.8$\times$ baseline). This is \textbf{lower than criteria $k{=}8$ alone (83.6\% at 5.3$\times$)}, suggesting that adding calibration context and a second model does not improve on criteria + ensembling. Applying per-response soft blending yields 84.8\% on a held-out test set (${\sim}$348 examples), but the small test set and the failure of base soft blending (Section~\ref{sec:soft-blending}) warrant caution in interpreting this result.
 
@@ -511,7 +513,7 @@ The budget-constrained variance-informed variant restricts mean $n_{\text{full}}
 \subsection{Analysis}
 \label{sec:ablations}
 
-\paragraph{Diminishing returns of ensembling.} We analyse accuracy as a function of $k$ by subsampling the first $k$ scores from our $k{=}8$ results without rerunning the experiment:
+\paragraph{Diminishing returns of ensembling.} We analyse accuracy as a function of $k$ by subsampling the first $k$ scores from our $k{=}8$ results without rerunning the experiment. Table~\ref{tab:diminishing-returns} reports the resulting accuracies across model tiers:
 
 \begin{table}[ht]
 \centering
@@ -533,7 +535,7 @@ $k$ & Full & Mini & Nano \\
 \end{tabular}
 \end{table}
 
-Most of the gain is captured by $k{=}3$ for all models. Nano benefits the most from ensembling in relative terms (+19.1pp from $k{=}1$ to $k{=}8$), approaching the full model's single-shot baseline (71.7\%) at a fraction of the cost.
+Most of the gain is captured by $k{=}3$ for all models (Figure~\ref{fig:diminishing-returns}). Nano benefits the most from ensembling in relative terms (+19.1pp from $k{=}1$ to $k{=}8$), approaching the full model's single-shot baseline (71.7\%) at a fraction of the cost.
 
 \begin{figure}[t]
 \centering
@@ -546,7 +548,7 @@ Most of the gain is captured by $k{=}3$ for all models. Nano benefits the most f
 \label{sec:temperature}
 We sweep temperature across \{0.0, 0.3, 0.7, 1.0\} for the base prompt with the full model. At $k{=}1$, accuracy is stable across temperatures (71--73\%, CIs overlapping). At $k{=}8$, ensembling helps at all temperatures, but the gain increases with temperature: from +4.6pp at temperature~0 (72.5\% $\to$ 77.1\%) to +9.8pp at temperature~1.0 (71.7\% $\to$ 81.5\%). Surprisingly, even at temperature~0 there is a significant +4.6pp gap between $k{=}1$ (72.5\%) and $k{=}8$ (77.1\%), with non-overlapping confidence intervals. This means \texttt{temperature=0} does not produce deterministic outputs, likely due to floating-point non-determinism in GPU inference and the absence of a \texttt{seed} parameter. This is a useful finding for practitioners: even deployments that assume deterministic scoring at temperature~0 can benefit from ensembling.
 
-Temperature 1.0 maximises ensemble diversity and the resulting accuracy gain, which is why we use it for all conditions. The $k{=}1$ baseline is not meaningfully affected by this choice.
+Temperature 1.0 maximises ensemble diversity and the resulting accuracy gain, which is why we use it for all conditions (Figure~\ref{fig:temperature}). The $k{=}1$ baseline is not meaningfully affected by this choice.
 
 \begin{figure}[t]
 \centering
@@ -557,7 +559,7 @@ Temperature 1.0 maximises ensemble diversity and the resulting accuracy gain, wh
 
 \paragraph{What works and what doesn't.}
 \label{sec:what-works}
-The most important finding is what \emph{doesn't} stack. The full prompt $\times$ model $\times$ $k$ grid (all derived from existing collections) is:
+The most important finding is what \emph{doesn't} stack. Table~\ref{tab:what-works} shows the full prompt $\times$ model $\times$ $k$ grid (all derived from existing collections):
 
 \begin{table}[ht]
 \centering
@@ -589,7 +591,7 @@ Precise~IF is the lowest-performing category across all conditions (26--53\%). I
 \label{sec:convergence}
 The mini model ($n{=}8$) achieves 79.2\%, only 2.3pp below the full model ensemble (81.5\%) at roughly one-quarter the cost (1.2$\times$ vs 5.0$\times$). This suggests GPT-5.4 mini is a strong judge for most examples, with the full model providing marginal improvements on a subset of hard cases.
 
-To understand the relationship more precisely, we measure how quickly mini's winner selection converges to the full model's as $k$ increases, using two statistics: \textbf{agreement} (fraction of examples where both models pick the same winner) and \textbf{Spearman rank correlation} $\rho$ between their mean-score vectors across the four responses.
+To understand the relationship more precisely, we measure how quickly mini's winner selection converges to the full model's as $k$ increases, using two statistics: \textbf{agreement} (fraction of examples where both models pick the same winner) and \textbf{Spearman rank correlation} $\rho$ between their mean-score vectors across the four responses. Table~\ref{tab:convergence} reports both statistics as a function of ensemble size, and Figure~\ref{fig:convergence} visualises them alongside the corresponding nano curves.
 
 \begin{table}[ht]
 \centering
@@ -622,7 +624,7 @@ Nano shows a qualitatively similar pattern but with a lower ceiling: agreement r
 
 \paragraph{Soft blending.}
 \label{sec:soft-blending-analysis}
-On the full dataset (in-sample), soft blending (83.2\%) outperforms full model $k{=}8$ (81.5\%), consistent with the hypothesis that combining two imperfectly correlated estimators reduces variance. However, on the held-out test set, base soft blend (80.2\%) does not beat full $k{=}8$ (81.5\%), suggesting the in-sample gain is partly due to midpoint overfitting. The benefit is more robust when combined with prompt improvements: combined+blend (84.8\% test) does outperform combined full $k{=}8$ (82.6\%), indicating that blending is most valuable when both models have richer scoring signals from criteria and calibration context.
+On the full dataset (in-sample), soft blending (83.2\%) outperforms full model $k{=}8$ (81.5\%), consistent with the hypothesis that combining two imperfectly correlated estimators reduces variance (Figure~\ref{fig:soft-blending-fig}). However, on the held-out test set, base soft blend (80.2\%) does not beat full $k{=}8$ (81.5\%), suggesting the in-sample gain is partly due to midpoint overfitting. The benefit is more robust when combined with prompt improvements: combined+blend (84.8\% test) does outperform combined full $k{=}8$ (82.6\%), indicating that blending is most valuable when both models have richer scoring signals from criteria and calibration context.
 
 \begin{figure}[t]
 \centering
