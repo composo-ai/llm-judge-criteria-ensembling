@@ -338,7 +338,7 @@ Soft blending achieves 83.2% on the full dataset (80.2% on a held-out 20% test s
 
 The calibration "low" variant is used as default (slightly best-performing in isolation, and by showing a known-bad example it may sharpen discrimination at the top of the scale).
 
-**Result**: 82.6% accuracy (±1.8pp) at $0.0913/example (6.8× baseline). This is **lower than criteria k=8 alone (83.6% at 5.3×)**, suggesting that adding calibration context and a second model does not improve on criteria + ensembling. Applying per-response soft blending yields 84.8% on a held-out test set (~349 examples), but the small test set and the failure of base soft blending (Section 3.5.2) warrant caution in interpreting this result.
+**Result**: 82.6% accuracy (±1.8pp) at $0.0913/example (6.8× baseline). This is **lower than criteria k=8 alone (83.6% at 5.3×)**, suggesting that adding calibration context and a second model does not improve on criteria + ensembling. Applying per-response soft blending yields 84.8% on a held-out test set (~348 examples), but the small test set and the failure of base soft blending (Section 3.5.2) warrant caution in interpreting this result.
 
 ---
 
@@ -372,12 +372,12 @@ The calibration "low" variant is used as default (slightly best-performing in is
 | Calibration cross (k=1) | 1745 | 72.4% (±2.1pp) | 77.0% | 68.2% | 68.0% | 30.6% | 89.1% | $0.0194 | 1.5× |
 | Combined (full k=8) | 1746 | 82.6% (±1.8pp) | 87.6% | 80.6% | 77.6% | **52.5%** | 92.8% | $0.0913 | 6.8× |
 | Soft blend (test) ‡ | ~343 | 80.2% | — | — | — | — | — | $0.0817 | 6.1× |
-| Combined + blend (test) ‡† | ~349 | 84.8% | — | — | — | — | — | $0.0913 | 6.8× |
+| Combined + blend (test) ‡† | ~348 | 84.8% | — | — | — | — | — | $0.0913 | 6.8× |
 | Var-informed (≤2 calls, test) ‡ | ~343 | 74.9% | — | — | — | — | — | ~$0.022 | 1.6× |
 
 > **Note on test-set evaluation (‡ rows):** Blend parameters are optimised on 80% of the data and evaluated on the remaining 20%. The test set is small (~340 examples), so per-subset breakdowns are omitted.
 >
-> **†** Combined + blend produces the highest test-set number (84.8%) but should be interpreted with caution: the base soft blend failed to generalise (80.2% vs 81.5% for full k=8, Section 5.4), the test set is small (~349 examples), and the non-blended combined condition (82.6%) already underperforms criteria k=8 (83.6%).
+> **†** Combined + blend produces the highest test-set number (84.8%) but should be interpreted with caution: the base soft blend failed to generalise (80.2% vs 81.5% for full k=8, Section 5.4), the test set is small (~348 examples), and the non-blended combined condition (82.6%) already underperforms criteria k=8 (83.6%).
 
 ![Hero Accuracy](figures/hero_accuracy.png)
 *Figure 7: Accuracy by condition and category. Criteria k=8 (83.6%) outperforms combined (82.6%) at lower cost (5.3× vs 6.8× baseline). Precise IF remains the hardest category across all conditions.*

@@ -427,7 +427,7 @@ Cal.\ both ($k{=}1$)        & 1730 & 72.8\% ($\pm$2.1) & 77.3 & 71.1 & 65.6 & 31
 Cal.\ cross ($k{=}1$)       & 1745 & 72.4\% ($\pm$2.1) & 77.0 & 68.2 & 68.0 & 30.6 & 89.1 & \$0.019 & 1.5$\times$ \\
 Combined (full $k{=}8$)     & 1746 & 82.6\% ($\pm$1.8) & 87.6 & 80.6 & 77.6 & \textbf{52.5} & 92.8 & \$0.091 & 6.8$\times$ \\
 Soft blend (test)$^\ddagger$ & ${\sim}$343 & 80.2\% & --- & --- & --- & --- & --- & \$0.082 & 6.1$\times$ \\
-Comb.+blend (test)$^{\ddagger\dagger}$ & ${\sim}$349 & 84.8\% & --- & --- & --- & --- & --- & \$0.091 & 6.8$\times$ \\
+Comb.+blend (test)$^{\ddagger\dagger}$ & ${\sim}$348 & 84.8\% & --- & --- & --- & --- & --- & \$0.091 & 6.8$\times$ \\
 Var-inf.\ ($\leq$2, test)$^\ddagger$ & ${\sim}$343 & 74.9\% & --- & --- & --- & --- & --- & ${\sim}$\$0.022 & 1.6$\times$ \\
 \bottomrule
 \end{tabular}%
@@ -436,7 +436,7 @@ Var-inf.\ ($\leq$2, test)$^\ddagger$ & ${\sim}$343 & 74.9\% & --- & --- & --- & 
 \vspace{4pt}
 {\footnotesize
 $^\ddagger$ Test-set evaluation: blend parameters optimised on 80\% of data, evaluated on remaining 20\%. Test set is small (${\sim}$340 examples), so per-subset breakdowns are omitted. \\
-$^{\dagger}$ Combined + blend produces the highest test-set number (84.8\%) but should be interpreted with caution: the base soft blend failed to generalise (80.2\% vs 81.5\% for full $k{=}8$, Section~\ref{sec:soft-blending-analysis}), the test set is small (${\sim}$349 examples), and the non-blended combined condition (82.6\%) already underperforms criteria $k{=}8$ (83.6\%).
+$^{\dagger}$ Combined + blend produces the highest test-set number (84.8\%) but should be interpreted with caution: the base soft blend failed to generalise (80.2\% vs 81.5\% for full $k{=}8$, Section~\ref{sec:soft-blending-analysis}), the test set is small (${\sim}$348 examples), and the non-blended combined condition (82.6\%) already underperforms criteria $k{=}8$ (83.6\%).
 }
 \end{table}
 
@@ -504,7 +504,7 @@ On the full dataset (in-sample), soft blending achieves 83.2\% vs 81.5\% for ful
 
 The budget-constrained variance-informed variant restricts mean $n_{\text{full}} \leq 2.0$, achieving 74.9\% on the test set at 1.6$\times$ baseline cost. This is barely above the baseline (71.7\%) and far below mini $k{=}8$ (79.2\% at 1.2$\times$ cost), suggesting that \textbf{variance-informed routing does not improve on simpler approaches at comparable cost}.
 
-\paragraph{Combined condition.} 82.6\% accuracy ($\pm$1.8pp) at \$0.0913/example (6.8$\times$ baseline). This is \textbf{lower than criteria $k{=}8$ alone (83.6\% at 5.3$\times$)}, suggesting that adding calibration context and a second model does not improve on criteria + ensembling. Applying per-response soft blending yields 84.8\% on a held-out test set (${\sim}$349 examples), but the small test set and the failure of base soft blending (Section~\ref{sec:soft-blending}) warrant caution in interpreting this result.
+\paragraph{Combined condition.} 82.6\% accuracy ($\pm$1.8pp) at \$0.0913/example (6.8$\times$ baseline). This is \textbf{lower than criteria $k{=}8$ alone (83.6\% at 5.3$\times$)}, suggesting that adding calibration context and a second model does not improve on criteria + ensembling. Applying per-response soft blending yields 84.8\% on a held-out test set (${\sim}$348 examples), but the small test set and the failure of base soft blending (Section~\ref{sec:soft-blending}) warrant caution in interpreting this result.
 
 \subsection{Analysis}
 \label{sec:ablations}
