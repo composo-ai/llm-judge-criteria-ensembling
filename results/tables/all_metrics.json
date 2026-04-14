@@ -3079,5 +3079,479 @@
     "cost": {
       "cost_per_example": 0.01998372591943959
     }
+  },
+  "intersection_ensemble_k8": {
+    "name": "ensemble_k8",
+    "n": 1711,
+    "accuracy": {
+      "overall": 0.8158971361776739,
+      "n": 1711,
+      "n_correct": 1396,
+      "n_tied": 76,
+      "by_subset": {
+        "Factuality": {
+          "accuracy": 0.8670886075949367,
+          "n": 474,
+          "n_correct": 411,
+          "n_tied": 15
+        },
+        "Focus": {
+          "accuracy": 0.8181818181818182,
+          "n": 495,
+          "n_correct": 405,
+          "n_tied": 20
+        },
+        "Math": {
+          "accuracy": 0.7486338797814208,
+          "n": 183,
+          "n_correct": 137,
+          "n_tied": 12
+        },
+        "Precise IF": {
+          "accuracy": 0.44654088050314467,
+          "n": 159,
+          "n_correct": 71,
+          "n_tied": 26
+        },
+        "Safety": {
+          "accuracy": 0.93,
+          "n": 400,
+          "n_correct": 372,
+          "n_tied": 3
+        }
+      }
+    },
+    "accuracy_ci": {
+      "overall": {
+        "mean": 0.8159751607247224,
+        "ci_low": 0.7965955581531268,
+        "ci_high": 0.8334307422559907
+      },
+      "by_subset": {
+        "Factuality": {
+          "mean": 0.8669064614463216,
+          "ci_low": 0.8358523258437833,
+          "ci_high": 0.8964804323563664
+        },
+        "Focus": {
+          "mean": 0.8183473400073683,
+          "ci_low": 0.7819687087506794,
+          "ci_high": 0.8514741205640787
+        },
+        "Math": {
+          "mean": 0.7497299732886186,
+          "ci_low": 0.6842105263157895,
+          "ci_high": 0.8131961259079903
+        },
+        "Precise IF": {
+          "mean": 0.4461023189840322,
+          "ci_low": 0.366656976744186,
+          "ci_high": 0.5208406690140845
+        },
+        "Safety": {
+          "mean": 0.9299267859409764,
+          "ci_low": 0.9037555547186865,
+          "ci_high": 0.9536131499327656
+        }
+      }
+    },
+    "cost": {
+      "cost_per_example": 0.013365560710111033
+    }
+  },
+  "intersection_mini_k8": {
+    "name": "mini_k8",
+    "n": 1711,
+    "accuracy": {
+      "overall": 0.7913500876680304,
+      "n": 1711,
+      "n_correct": 1354,
+      "n_tied": 75,
+      "by_subset": {
+        "Factuality": {
+          "accuracy": 0.8333333333333334,
+          "n": 474,
+          "n_correct": 395,
+          "n_tied": 18
+        },
+        "Focus": {
+          "accuracy": 0.802020202020202,
+          "n": 495,
+          "n_correct": 397,
+          "n_tied": 23
+        },
+        "Math": {
+          "accuracy": 0.6830601092896175,
+          "n": 183,
+          "n_correct": 125,
+          "n_tied": 10
+        },
+        "Precise IF": {
+          "accuracy": 0.4025157232704403,
+          "n": 159,
+          "n_correct": 64,
+          "n_tied": 20
+        },
+        "Safety": {
+          "accuracy": 0.9325,
+          "n": 400,
+          "n_correct": 373,
+          "n_tied": 4
+        }
+      }
+    },
+    "accuracy_ci": {
+      "overall": {
+        "mean": 0.7916624780829925,
+        "ci_low": 0.7726475745178258,
+        "ci_high": 0.8106370543541789
+      },
+      "by_subset": {
+        "Factuality": {
+          "mean": 0.8335066843196771,
+          "ci_low": 0.7987057432988911,
+          "ci_high": 0.8687099972647703
+        },
+        "Focus": {
+          "mean": 0.8023275946400457,
+          "ci_low": 0.766806515096157,
+          "ci_high": 0.8355406945127793
+        },
+        "Math": {
+          "mean": 0.6845994417952548,
+          "ci_low": 0.6144578313253012,
+          "ci_high": 0.75
+        },
+        "Precise IF": {
+          "mean": 0.4023183694747065,
+          "ci_low": 0.3262246412666997,
+          "ci_high": 0.4812723214285713
+        },
+        "Safety": {
+          "mean": 0.9324796068086887,
+          "ci_low": 0.9068595702529717,
+          "ci_high": 0.9554455445544554
+        }
+      }
+    },
+    "cost": {
+      "cost_per_example": 0.013365560710111033
+    }
+  },
+  "intersection_criteria_k8": {
+    "name": "criteria_k8",
+    "n": 1712,
+    "accuracy": {
+      "overall": 0.8358644859813084,
+      "n": 1712,
+      "n_correct": 1431,
+      "n_tied": 56,
+      "by_subset": {
+        "Factuality": {
+          "accuracy": 0.890295358649789,
+          "n": 474,
+          "n_correct": 422,
+          "n_tied": 11
+        },
+        "Focus": {
+          "accuracy": 0.8282828282828283,
+          "n": 495,
+          "n_correct": 410,
+          "n_tied": 13
+        },
+        "Math": {
+          "accuracy": 0.7923497267759563,
+          "n": 183,
+          "n_correct": 145,
+          "n_tied": 8
+        },
+        "Precise IF": {
+          "accuracy": 0.4875,
+          "n": 160,
+          "n_correct": 78,
+          "n_tied": 16
+        },
+        "Safety": {
+          "accuracy": 0.94,
+          "n": 400,
+          "n_correct": 376,
+          "n_tied": 8
+        }
+      }
+    },
+    "accuracy_ci": {
+      "overall": {
+        "mean": 0.8358463785046729,
+        "ci_low": 0.8177570093457944,
+        "ci_high": 0.852803738317757
+      },
+      "by_subset": {
+        "Factuality": {
+          "mean": 0.8902045256996476,
+          "ci_low": 0.8620689655172413,
+          "ci_high": 0.9158394356847868
+        },
+        "Focus": {
+          "mean": 0.828333803946119,
+          "ci_low": 0.7944097691713348,
+          "ci_high": 0.860282871756487
+        },
+        "Math": {
+          "mean": 0.7921679773964704,
+          "ci_low": 0.730140056022409,
+          "ci_high": 0.8479585744465876
+        },
+        "Precise IF": {
+          "mean": 0.48853085105150057,
+          "ci_low": 0.41289533047597565,
+          "ci_high": 0.5679012345679012
+        },
+        "Safety": {
+          "mean": 0.9395346751706557,
+          "ci_low": 0.9151602581633211,
+          "ci_high": 0.9613266341046788
+        }
+      }
+    },
+    "cost": {
+      "cost_per_example": 0.014067788770443892
+    }
+  },
+  "intersection_criteria_mini_k8": {
+    "name": "criteria_mini_k8",
+    "n": 1712,
+    "accuracy": {
+      "overall": 0.8130841121495327,
+      "n": 1712,
+      "n_correct": 1392,
+      "n_tied": 58,
+      "by_subset": {
+        "Factuality": {
+          "accuracy": 0.8544303797468354,
+          "n": 474,
+          "n_correct": 405,
+          "n_tied": 12
+        },
+        "Focus": {
+          "accuracy": 0.8222222222222222,
+          "n": 495,
+          "n_correct": 407,
+          "n_tied": 17
+        },
+        "Math": {
+          "accuracy": 0.726775956284153,
+          "n": 183,
+          "n_correct": 133,
+          "n_tied": 7
+        },
+        "Precise IF": {
+          "accuracy": 0.4125,
+          "n": 160,
+          "n_correct": 66,
+          "n_tied": 18
+        },
+        "Safety": {
+          "accuracy": 0.9525,
+          "n": 400,
+          "n_correct": 381,
+          "n_tied": 4
+        }
+      }
+    },
+    "accuracy_ci": {
+      "overall": {
+        "mean": 0.8136305490654205,
+        "ci_low": 0.7961448598130841,
+        "ci_high": 0.8323598130841121
+      },
+      "by_subset": {
+        "Factuality": {
+          "mean": 0.854677504829029,
+          "ci_low": 0.8221248153520622,
+          "ci_high": 0.886997966866049
+        },
+        "Focus": {
+          "mean": 0.8227252509191109,
+          "ci_low": 0.78781220821662,
+          "ci_high": 0.8557915367642107
+        },
+        "Math": {
+          "mean": 0.72873757984704,
+          "ci_low": 0.6666666666666666,
+          "ci_high": 0.7907006407214048
+        },
+        "Precise IF": {
+          "mean": 0.4136500225609176,
+          "ci_low": 0.33543196202531644,
+          "ci_high": 0.49044585987261147
+        },
+        "Safety": {
+          "mean": 0.9523753242914172,
+          "ci_low": 0.9307692307692308,
+          "ci_high": 0.9722257118927973
+        }
+      }
+    },
+    "cost": {
+      "cost_per_example": 0.014067788770443892
+    }
+  },
+  "intersection_cal_low_k8": {
+    "name": "cal_low_k8",
+    "n": 1712,
+    "accuracy": {
+      "overall": 0.8171728971962616,
+      "n": 1712,
+      "n_correct": 1399,
+      "n_tied": 75,
+      "by_subset": {
+        "Factuality": {
+          "accuracy": 0.8670886075949367,
+          "n": 474,
+          "n_correct": 411,
+          "n_tied": 14
+        },
+        "Focus": {
+          "accuracy": 0.806060606060606,
+          "n": 495,
+          "n_correct": 399,
+          "n_tied": 28
+        },
+        "Math": {
+          "accuracy": 0.7540983606557377,
+          "n": 183,
+          "n_correct": 138,
+          "n_tied": 13
+        },
+        "Precise IF": {
+          "accuracy": 0.46875,
+          "n": 160,
+          "n_correct": 75,
+          "n_tied": 17
+        },
+        "Safety": {
+          "accuracy": 0.94,
+          "n": 400,
+          "n_correct": 376,
+          "n_tied": 3
+        }
+      }
+    },
+    "accuracy_ci": {
+      "overall": {
+        "mean": 0.8172316004672898,
+        "ci_low": 0.7978971962616822,
+        "ci_high": 0.8364485981308412
+      },
+      "by_subset": {
+        "Factuality": {
+          "mean": 0.866875220661195,
+          "ci_low": 0.835820895522388,
+          "ci_high": 0.8964059196617337
+        },
+        "Focus": {
+          "mean": 0.806363274073073,
+          "ci_low": 0.7699770258980786,
+          "ci_high": 0.8402507226211477
+        },
+        "Math": {
+          "mean": 0.7548055182507782,
+          "ci_low": 0.6898395721925134,
+          "ci_high": 0.8167558706132393
+        },
+        "Precise IF": {
+          "mean": 0.46909489057248155,
+          "ci_low": 0.39226248510453904,
+          "ci_high": 0.545468488566648
+        },
+        "Safety": {
+          "mean": 0.9395821187119169,
+          "ci_low": 0.9142806000681896,
+          "ci_high": 0.9623689516129033
+        }
+      }
+    },
+    "cost": {
+      "cost_per_example": 0.01987301109813078
+    }
+  },
+  "intersection_combined_k8": {
+    "name": "combined_k8",
+    "n": 1713,
+    "accuracy": {
+      "overall": 0.8260361938120256,
+      "n": 1713,
+      "n_correct": 1415,
+      "n_tied": 65,
+      "by_subset": {
+        "Factuality": {
+          "accuracy": 0.8755274261603375,
+          "n": 474,
+          "n_correct": 415,
+          "n_tied": 13
+        },
+        "Focus": {
+          "accuracy": 0.806060606060606,
+          "n": 495,
+          "n_correct": 399,
+          "n_tied": 25
+        },
+        "Math": {
+          "accuracy": 0.7759562841530054,
+          "n": 183,
+          "n_correct": 142,
+          "n_tied": 10
+        },
+        "Precise IF": {
+          "accuracy": 0.525,
+          "n": 160,
+          "n_correct": 84,
+          "n_tied": 13
+        },
+        "Safety": {
+          "accuracy": 0.9351620947630923,
+          "n": 401,
+          "n_correct": 375,
+          "n_tied": 4
+        }
+      }
+    },
+    "accuracy_ci": {
+      "overall": {
+        "mean": 0.8262375948628138,
+        "ci_low": 0.8079392877991827,
+        "ci_high": 0.843549328663164
+      },
+      "by_subset": {
+        "Factuality": {
+          "mean": 0.8755463826280273,
+          "ci_low": 0.8464726206423367,
+          "ci_high": 0.9034957038745076
+        },
+        "Focus": {
+          "mean": 0.8061470758293198,
+          "ci_low": 0.7707360942086048,
+          "ci_high": 0.8386429011711527
+        },
+        "Math": {
+          "mean": 0.7770400909292484,
+          "ci_low": 0.7150530670232326,
+          "ci_high": 0.836644788074313
+        },
+        "Precise IF": {
+          "mean": 0.5263422889295678,
+          "ci_low": 0.4505860290670417,
+          "ci_high": 0.603902867965368
+        },
+        "Safety": {
+          "mean": 0.9348464193855603,
+          "ci_low": 0.9086409796893669,
+          "ci_high": 0.9580400108137334
+        }
+      }
+    },
+    "cost": {
+      "cost_per_example": 0.01998372591943959
+    }
   }
 }

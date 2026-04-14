@@ -421,7 +421,7 @@ Nano model $k{=}1$        & 1700 & 52.3\% ($\pm$2.3) & 45.6 & 51.0 & 45.1 & 26.3
 \multicolumn{10}{l}{\textit{(b) Investigated techniques}} \\
 \midrule
 Cal.\ low ($k{=}1$)         & 1737 & 73.8\% ($\pm$2.1) & 78.9 & 71.5 & 65.6 & 32.5 & 89.9 & \$0.020 & 1.5$\times$ \\
-Cal.\ low ($k{=}8$)         & 1737 & 81.7\% ($\pm$1.8) & 86.7 & 80.6 & 75.4 & 46.9 & 93.0 & \$0.074 & 5.6$\times$ \\
+Cal.\ low ($k{=}8$)         & 1744 & 81.7\% ($\pm$1.8) & 86.7 & 80.6 & 75.4 & 46.9 & 93.0 & \$0.074 & 5.6$\times$ \\
 Cal.\ high ($k{=}1$)        & 1744 & 72.4\% ($\pm$2.1) & 77.3 & 68.4 & 67.8 & 34.4 & 87.7 & \$0.019 & 1.4$\times$ \\
 Cal.\ both ($k{=}1$)        & 1730 & 72.8\% ($\pm$2.1) & 77.3 & 71.1 & 65.6 & 31.9 & 88.8 & \$0.026 & 1.9$\times$ \\
 Cal.\ cross ($k{=}1$)       & 1745 & 72.4\% ($\pm$2.1) & 77.0 & 68.2 & 68.0 & 30.6 & 89.1 & \$0.019 & 1.5$\times$ \\
@@ -505,6 +505,8 @@ On the full dataset (in-sample), soft blending achieves 83.2\% vs 81.5\% for ful
 The budget-constrained variance-informed variant restricts mean $n_{\text{full}} \leq 2.0$, achieving 74.9\% on the test set at 1.6$\times$ baseline cost. This is barely above the baseline (71.7\%) and far below mini $k{=}8$ (79.2\% at 1.2$\times$ cost), suggesting that \textbf{variance-informed routing does not improve on simpler approaches at comparable cost}.
 
 \paragraph{Combined condition.} 82.6\% accuracy ($\pm$1.8pp) at \$0.0913/example (6.8$\times$ baseline). This is \textbf{lower than criteria $k{=}8$ alone (83.6\% at 5.3$\times$)}, suggesting that adding calibration context and a second model does not improve on criteria + ensembling. Applying per-response soft blending yields 84.8\% on a held-out test set (${\sim}$348 examples), but the small test set and the failure of base soft blending (Section~\ref{sec:soft-blending}) warrant caution in interpreting this result.
+
+\paragraph{Robustness to refusals.} Conditions in Table~\ref{tab:results-main} have slightly different sample sizes ($N{=}1700$--$1746$) because Azure content filters refuse different prompts depending on prompt configuration. To check that this does not bias the comparisons, we recompute each headline condition's accuracy on the intersection of ${\sim}$1710 examples that succeeded under all four main collections. Intersection accuracies differ from per-condition accuracies by at most 0.2pp, and the relative ranking of conditions is preserved (Appendix~\ref{sec:intersection}, Table~\ref{tab:intersection}), so refusal-driven sample variation is not driving the reported differences.
 
 \subsection{Analysis}
 \label{sec:ablations}
@@ -820,5 +822,32 @@ Combined (full $k{=}8$)          & 87.6 ($\pm$2.9) & 80.6 ($\pm$3.5) & 77.6 ($\p
 \end{table}
 
 Test-set rows from Table~\ref{tab:results-main} (Soft blend, Combined+blend, Var-informed) are omitted here because the small held-out sample (${\sim}$340 examples, redistributed across categories) does not support reliable per-category CIs.
+
+%----------------------------------------------------------
+\section{Intersection-Based Accuracy}
+\label{sec:intersection}
+%----------------------------------------------------------
+
+Conditions in Table~\ref{tab:results-main} have slightly different sample sizes ($N{=}1700$--$1746$) because Azure content filters refuse different prompts depending on prompt configuration. To verify that this refusal-driven sample variation does not bias the headline comparisons, we recompute accuracy on the \emph{intersection} of $N{=}1710$ examples that succeeded under all four main collections (baseline, criteria, calibration\_low, and combined). Table~\ref{tab:intersection} reports each headline condition's accuracy on its full sample alongside its accuracy on the intersection.
+
+\begin{table}[ht]
+\centering
+\caption{Headline conditions evaluated on their full sample versus the intersection of $N{=}1710$ examples shared across baseline, criteria, calibration\_low, and combined collections. Differences are within statistical noise, and the relative ranking of conditions is preserved.}
+\label{tab:intersection}
+\small
+\begin{tabular}{lrrrr}
+\toprule
+Condition & Full $N$ & Full Acc.\ & Intersection Acc.\ & $\Delta$ \\
+\midrule
+Baseline (full $k{=}1$)         & 1729 & 71.7\% & 71.7\% & $-$0.0 \\
+Ensemble (full $k{=}8$)         & 1730 & 81.5\% & 81.6\% & $+$0.1 \\
+\textbf{Criteria (full $k{=}8$)} & 1741 & \textbf{83.6\%} & \textbf{83.6\%} & $+$0.0 \\
+Mini model $k{=}8$              & 1730 & 79.2\% & 79.1\% & $-$0.1 \\
+Criteria (mini $k{=}8$)         & 1742 & 81.5\% & 81.3\% & $-$0.2 \\
+Cal.\ low ($k{=}8$)             & 1744 & 81.7\% & 81.7\% & $+$0.0 \\
+Combined (full $k{=}8$)         & 1746 & 82.6\% & 82.6\% & $-$0.0 \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \end{document}

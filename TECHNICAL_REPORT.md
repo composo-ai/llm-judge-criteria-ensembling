@@ -366,7 +366,7 @@ The calibration "low" variant is used as default (slightly best-performing in is
 | Condition | N | Overall (95% CI) | Factuality | Focus | Math | Precise IF | Safety | $/example | vs Baseline |
 |-----------|---|-------------------|------------|-------|------|------------|--------|-----------|-------------|
 | Calibration low (k=1) | 1737 | 73.8% (±2.1pp) | 78.9% | 71.5% | 65.6% | 32.5% | 89.9% | $0.0198 | 1.5× |
-| Calibration low (k=8) | 1737 | 81.7% (±1.8pp) | 86.7% | 80.6% | 75.4% | 46.9% | 93.0% | $0.0744 | 5.6× |
+| Calibration low (k=8) | 1744 | 81.7% (±1.8pp) | 86.7% | 80.6% | 75.4% | 46.9% | 93.0% | $0.0744 | 5.6× |
 | Calibration high (k=1) | 1744 | 72.4% (±2.1pp) | 77.3% | 68.4% | 67.8% | 34.4% | 87.7% | $0.0192 | 1.4× |
 | Calibration both (k=1) | 1730 | 72.8% (±2.1pp) | 77.3% | 71.1% | 65.6% | 31.9% | 88.8% | $0.0256 | 1.9× |
 | Calibration cross (k=1) | 1745 | 72.4% (±2.1pp) | 77.0% | 68.2% | 68.0% | 30.6% | 89.1% | $0.0194 | 1.5× |
@@ -378,6 +378,20 @@ The calibration "low" variant is used as default (slightly best-performing in is
 > **Note on test-set evaluation (‡ rows):** Blend parameters are optimised on 80% of the data and evaluated on the remaining 20%. The test set is small (~340 examples), so per-subset breakdowns are omitted.
 >
 > **†** Combined + blend produces the highest test-set number (84.8%) but should be interpreted with caution: the base soft blend failed to generalise (80.2% vs 81.5% for full k=8, Section 5.4), the test set is small (~348 examples), and the non-blended combined condition (82.6%) already underperforms criteria k=8 (83.6%).
+
+**Robustness to refusals.** Conditions in Table 1 have slightly different sample sizes (N=1700–1746) because Azure content filters refuse different prompts depending on prompt configuration. To check that this does not bias the comparisons, we recompute each headline condition's accuracy on the intersection of ~1710 examples that succeeded under all four main collections (baseline, criteria, calibration_low, combined). Intersection accuracies differ from per-condition accuracies by at most 0.2pp, and the relative ranking of conditions is preserved:
+
+| Condition | Full N | Full Acc. | Intersection Acc. | Δ |
+|-----------|--------|-----------|-------------------|---|
+| Baseline (full k=1) | 1729 | 71.7% | 71.7% | −0.0 |
+| Ensemble (full k=8) | 1730 | 81.5% | 81.6% | +0.1 |
+| **Criteria (full k=8)** | 1741 | **83.6%** | **83.6%** | +0.0 |
+| Mini model k=8 | 1730 | 79.2% | 79.1% | −0.1 |
+| Criteria (mini k=8) | 1742 | 81.5% | 81.3% | −0.2 |
+| Calibration low (k=8) | 1744 | 81.7% | 81.7% | +0.0 |
+| Combined (full k=8) | 1746 | 82.6% | 82.6% | −0.0 |
+
+Refusal-driven sample variation is therefore not driving the reported differences.
 
 ![Hero Accuracy](figures/hero_accuracy.png)
 *Figure 7: Accuracy by condition and category. Criteria k=8 (83.6%) outperforms combined (82.6%) at lower cost (5.3× vs 6.8× baseline). Precise IF remains the hardest category across all conditions.*
