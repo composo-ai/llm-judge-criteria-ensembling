@@ -310,14 +310,14 @@ Pearson correlation between per-response variance and correctness (binary) is $r
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\textwidth]{figures/variance_error_signal.png}
+\includegraphics[width=\textwidth]{variance_error_signal.png}
 \caption{Distribution of ensemble score variance for correct vs incorrect judgments (full model, GPT-5.4). Incorrect judgments exhibit higher variance, validating variance as an error signal.}
 \label{fig:variance-error}
 \end{figure}
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\textwidth]{figures/variance_correlation.png}
+\includegraphics[width=\textwidth]{variance_correlation.png}
 \caption{Score variance correlation (chosen response). Left: mini vs full ($r = 0.421$). Right: nano vs full ($r = 0.106$). Mini variance is a useful but imperfect proxy for full model uncertainty; nano variance is a much weaker signal.}
 \label{fig:variance-corr}
 \end{figure}
@@ -444,14 +444,14 @@ $^{\dagger}$ Combined + blend produces the highest test-set number (84.8\%) but 
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\textwidth]{figures/hero_accuracy.png}
+\includegraphics[width=\textwidth]{hero_accuracy.png}
 \caption{Accuracy by condition and category. Criteria $k{=}8$ (83.6\%) outperforms combined (82.6\%) at lower cost (5.3$\times$ vs 6.8$\times$ baseline). Precise~IF remains the hardest category across all conditions.}
 \label{fig:hero-accuracy}
 \end{figure}
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\textwidth]{figures/pareto_frontier.png}
+\includegraphics[width=\textwidth]{pareto_frontier.png}
 \caption{Cost vs accuracy Pareto frontier (full-dataset conditions only). Criteria $k{=}8$ Pareto-dominates all other high-accuracy conditions, achieving 83.6\% at 5.3$\times$ baseline cost, beating Combined (82.6\% at 6.8$\times$). Mini $k{=}8$ sits at 1.2$\times$ baseline cost; nano $k{=}8$ dominates the low-cost frontier at 0.4$\times$ baseline cost.}
 \label{fig:pareto}
 \end{figure}
@@ -539,7 +539,7 @@ Most of the gain is captured by $k{=}3$ for all models (Figure~\ref{fig:diminish
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\textwidth]{figures/diminishing_returns.png}
+\includegraphics[width=\textwidth]{diminishing_returns.png}
 \caption{Accuracy vs ensemble size $k$ for full (GPT-5.4), mini (GPT-5.4 mini), and nano (GPT-5.4 nano) models. Most gain is captured by $k{=}3$.}
 \label{fig:diminishing-returns}
 \end{figure}
@@ -552,7 +552,7 @@ Temperature 1.0 maximises ensemble diversity and the resulting accuracy gain, wh
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\textwidth]{figures/temperature_sweep.png}
+\includegraphics[width=\textwidth]{temperature_sweep.png}
 \caption{Baseline accuracy vs temperature for $k{=}1$ and $k{=}8$ with 95\% bootstrap CIs. $k{=}1$ accuracy is stable across temperatures. $k{=}8$ ensembling helps at all temperatures but the gain increases with temperature (from +4.6pp at temp=0 to +9.8pp at temp=1.0).}
 \label{fig:temperature}
 \end{figure}
@@ -613,7 +613,7 @@ $k$ & Agreement & Rank corr ($\rho$) \\
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\textwidth]{figures/mini_full_convergence.png}
+\includegraphics[width=\textwidth]{mini_full_convergence.png}
 \caption{Model agreement with full ($k{=}8$) as a function of ensemble size. Mini agreement approaches ${\sim}$79\% by $k{=}5$. Nano agreement reaches ${\sim}$70\% at $k{=}8$, with a lower rank correlation ceiling (${\sim}$0.67 vs ${\sim}$0.79), confirming the larger capability gap.}
 \label{fig:convergence}
 \end{figure}
@@ -628,21 +628,21 @@ On the full dataset (in-sample), soft blending (83.2\%) outperforms full model $
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\textwidth]{figures/soft_blending.png}
+\includegraphics[width=\textwidth]{soft_blending.png}
 \caption{Per-response soft blending accuracy vs mean blend weight $w$ (full dataset, in-sample). Accuracy increases monotonically with $w$, peaking at 83.2\% near $w = 0.91$ (mostly full model). On a held-out test set, the blend (80.2\%) does not beat full model $k{=}8$ (81.5\%), suggesting the in-sample gain is partly due to midpoint overfitting.}
 \label{fig:soft-blending-fig}
 \end{figure}
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\textwidth]{figures/per_response_escalation_pareto.png}
+\includegraphics[width=\textwidth]{per_response_escalation_pareto.png}
 \caption{Pareto frontier for per-response escalation. Each point is a different threshold $\theta$. The frontier has a large dead zone in the middle: escalating some but not all responses rarely changes the winner, since accuracy depends on relative rankings across all four responses. Meaningful operating points cluster near mini model $k{=}8$ (cheap) or full model $k{=}8$ (expensive), with little gain in between.}
 \label{fig:escalation-pareto}
 \end{figure}
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\textwidth]{figures/variance_informed_ensembling.png}
+\includegraphics[width=\textwidth]{variance_informed_ensembling.png}
 \caption{Pareto frontier for per-response variance-informed ensembling. The black line is the Pareto frontier and gray points show the full grid of (threshold, $n_{\text{full}}$) configurations (train-set accuracy, 80\% of data). The two stars show test-set accuracy (held-out 20\%) for the best overall (red, 81.0\%) and budget-constrained (green, 74.9\%) configurations.}
 \label{fig:var-informed}
 \end{figure}
