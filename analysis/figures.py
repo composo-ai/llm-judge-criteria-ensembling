@@ -288,7 +288,12 @@ def plot_variance_error_signal(metrics):
     ax.set_xticks([0, 1])
     ax.set_xticklabels(["Correct", "Incorrect"])
     ax.set_ylabel("Mean score std")
-    ax.set_title("Variance as Error Signal")
+    auc_data = metrics.get("variance_auc", {}).get("baseline_k8", {})
+    auc = auc_data.get("auc")
+    title = "Variance as Error Signal"
+    if auc is not None:
+        title += f"  (AUC = {auc:.3f})"
+    ax.set_title(title)
     ax.text(0, ax.get_ylim()[1] * 0.95, f"n={len(correct_stds)}", ha="center", fontsize=9)
     ax.text(1, ax.get_ylim()[1] * 0.95, f"n={len(incorrect_stds)}", ha="center", fontsize=9)
     _save(fig, "variance_error_signal")

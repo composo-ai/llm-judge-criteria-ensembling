@@ -54,7 +54,7 @@
 \printAffiliationsAndNotice{}
 
 \begin{abstract}
-LLM-as-a-judge, using a language model to score or rank candidate responses, is widely used as a scalable alternative to human evaluation in RLHF pipelines, benchmarking, and application layer evaluations (evals). However, judgment reliability depends heavily on prompting and aggregation strategy. We present an empirical investigation of practical, drop-in techniques that improve GPT-5.4 judge accuracy on RewardBench~2 without any finetuning. Two techniques account for nearly all available gains: task-specific criteria injection (+3.0pp at negligible cost) and ensemble scoring (+9.8pp at 5$\times$ cost). Combined, they reach \textbf{83.6\%} accuracy, +11.9pp over the 71.7\% baseline. Our investigation also covers three further techniques (calibration context, adaptive model escalation, and soft blending) which did not reliably improve on criteria + ensembling at comparable cost. Cheaper model tiers benefit disproportionately from ensembling: GPT-5.4 mini with $k{=}8$ achieves 79.2\% at 1.2$\times$ baseline cost, making high-accuracy LLM judges accessible at low cost.
+LLM-as-a-judge --- using a language model to score or rank candidate responses --- is widely used as a scalable alternative to human evaluation in RLHF pipelines, benchmarking, and application layer evaluations (evals). However, judgment reliability depends heavily on prompting and aggregation strategy. We present an empirical investigation of practical, drop-in techniques that improve GPT-5.4 judge accuracy on RewardBench~2, with a unifying lens of \emph{noise control on the stochastic judge}: ensembling as Monte Carlo averaging over per-call noise, criteria injection as between-response discrimination sharpening, and per-response score variance as a (weak but measurable) uncertainty signal. Two techniques account for nearly all available gains: task-specific criteria injection (+3.0pp at negligible cost) and ensemble scoring (+9.8pp at 5$\times$ cost). Combined, they reach \textbf{83.6\%} accuracy, +11.9pp over the 71.7\% baseline. Our investigation also covers three further techniques (calibration context, adaptive model escalation, and soft blending) which did not reliably improve on criteria + ensembling at comparable cost. Cheaper model tiers benefit disproportionately from ensembling: GPT-5.4 mini with $k{=}8$ achieves 79.2\% at 1.2$\times$ baseline cost, making high-accuracy LLM judges accessible at low cost.
 \end{abstract}
 
 %----------------------------------------------------------
@@ -64,23 +64,24 @@ LLM-as-a-judge, using a language model to score or rank candidate responses, is 
 
 LLM-as-a-judge has emerged as the dominant approach for scalable automated evaluation of language model outputs. A judge model rates or ranks candidate responses, providing a signal that can be used for reward modelling and benchmarking. Judges are also deployed as offline test suites that gate releases on output quality, and as real-time monitors that flag regressions or policy violations in deployed applications. Despite this wide adoption, the reliability of LLM judges varies considerably across prompting strategies and aggregation methods.
 
+At temperature $>0$, an LLM judge is a \emph{stochastic scorer}. We adopt this as a unifying lens: ensembling reduces per-call score variance via Monte Carlo averaging, and criteria injection sharpens between-response discrimination (the tie rate on RB2 drops from 20.4\% to 17.4\% at $k{=}1$ and from 4.5\% to 3.2\% at $k{=}8$). Techniques that attempt to add new information or reroute to a different estimator do not improve on this simple baseline once $k$ is large. Per-response score variance also provides a weak but measurable uncertainty signal (AUC${\approx}$0.60 for predicting incorrect judgments), which we examine as both a routing target and a diagnostic for judge error.
+
 RewardBench~2 (RB2) \citep{malik2025rewardbench2} provides a standardised evaluation of judge quality across five categories: Factuality, Focus, Mathematics, Precise~IF, and Safety. Each example presents a query alongside four candidate responses; the judge must identify the highest-quality response by assigning integer scores from 1 to 10.
 
-This paper presents an empirical investigation of five candidate techniques for improving judge accuracy:
+This paper presents an empirical investigation of four drop-in techniques for improving judge accuracy:
 
 \begin{enumerate}
   \item \textbf{Ensemble scoring}: requesting $k$ independent completions and taking the mean score.
   \item \textbf{Task-specific criteria}: augmenting the generic RB2 judge prompt with a category-aware one-sentence criterion.
   \item \textbf{Calibration context}: injecting a previously scored reference example to anchor the judge's scoring scale.
   \item \textbf{Adaptive model escalation}: using a cheaper mini model for easy examples and escalating to a full model when variance is high.
-  \item \textbf{Combination}: applying all techniques simultaneously.
 \end{enumerate}
 
-Our empirical investigation finds that criteria injection and ensembling account for nearly all available gains, while calibration, model routing, and soft blending do not reliably improve on this simpler baseline at comparable cost. We report results for all five techniques to provide a complete picture of what works in practice. All experiments are conducted with GPT-5.4 (full), GPT-5.4 mini, and GPT-5.4 nano via Azure OpenAI.
+We additionally evaluate a \textbf{combined} condition that stacks all four to test additivity. Our empirical investigation finds that criteria injection and ensembling account for nearly all available gains, while calibration, model routing, and soft blending do not reliably improve on this simpler baseline at comparable cost. We report results for all conditions to provide a complete picture of what works in practice. All experiments are conducted with GPT-5.4 (full), GPT-5.4 mini, and GPT-5.4 nano via Azure OpenAI.
 
 \paragraph{Contributions.} Our main contributions are:
 \begin{itemize}
-  \item A systematic comparison of five candidate techniques for improving LLM judge accuracy, evaluated on 1,753 RewardBench~2 examples across three model tiers (GPT-5.4, GPT-5.4 mini, GPT-5.4 nano).
+  \item A systematic comparison of four drop-in techniques for improving LLM judge accuracy (plus a combined stacking condition), evaluated on 1,753 RewardBench~2 examples across three model tiers (GPT-5.4, GPT-5.4 mini, GPT-5.4 nano).
   \item Evidence that criteria injection and ensembling dominate the cost--accuracy tradeoff, reaching 83.6\% (+11.9pp) at 5.3$\times$ cost, while calibration, model routing, and soft blending improved over baseline but were dominated by criteria + ensembling at comparable or lower cost.
   \item A cost--accuracy analysis showing that cheaper models benefit disproportionately from ensembling: mini $k{=}8$ matches the full model's single-shot accuracy at 1.2$\times$ cost.
 \end{itemize}
@@ -90,11 +91,11 @@ Our empirical investigation finds that criteria injection and ensembling account
 \label{sec:related-work}
 %----------------------------------------------------------
 
-\paragraph{LLM-as-a-judge.} Using LLMs to evaluate the outputs of other LLMs emerged through a cluster of concurrent early-2023 work, including G-Eval \citep{liu2023geval}, and was popularised by \citet{zheng2023judging} via MT-Bench and Chatbot Arena, which showed that strong judges can achieve high agreement with human preferences. Subsequent work has revealed systematic failure modes: \citet{wang2024large} demonstrated position and verbosity biases, while \citet{shankar2024validates} conducted a systematic study of when LLM-assisted evaluation diverges from human judgments. A complementary line of work finetunes open-source models specifically for evaluation, including Prometheus~2 \citep{kim2024prometheus}, which achieves strong judge performance at the cost of dedicated training. Our work extends this literature with an empirical comparison of practical techniques for improving judge accuracy without finetuning.
+\paragraph{LLM-as-a-judge.} Using LLMs to evaluate the outputs of other LLMs emerged through a cluster of concurrent early-2023 work, including G-Eval \citep{liu2023geval}, and was popularised by \citet{zheng2023judging} via MT-Bench and Chatbot Arena, which showed that strong judges can achieve high agreement with human preferences; we refer the reader to \citet{gu2024survey} for a comprehensive survey of the field. Subsequent work has revealed systematic failure modes: \citet{wang2024large} demonstrated position and verbosity biases, \citet{shankar2024validates} conducted a systematic study of when LLM-assisted evaluation diverges from human judgments, and \citet{bavaresco2025judgebench} evaluated LLM judges across 20 NLP tasks, finding substantial variance in reliability that directly motivates techniques that reduce scoring noise. A complementary line of work finetunes open-source models specifically for evaluation, including Prometheus~2 \citep{kim2024prometheus}, which achieves strong judge performance at the cost of dedicated training. Our work extends this literature with an empirical comparison of practical techniques for improving judge accuracy without finetuning.
 
-\paragraph{Benchmarks and ensembling.} RewardBench \citep{lambert2025rewardbench} introduced a standardised benchmark for evaluating reward models across diverse categories; RewardBench~2 \citep{malik2025rewardbench2} extends this with a four-response rating protocol covering Factuality, Focus, Mathematics, Precise~IF, and Safety. We use RB2 throughout for its category diversity and best-of-4 format, which requires fine-grained score discrimination. The idea of aggregating multiple stochastic samples to reduce variance is well-established: \citet{wang2023selfconsistency} showed that sampling multiple chain-of-thought reasoning paths and taking the majority vote substantially improves accuracy on reasoning tasks, and \citet{verga2024replacing} proposed replacing a single judge with a panel of diverse models. We investigate a related approach: ensembling multiple samples from a \emph{single} model using the API's \texttt{n} parameter, studied systematically across ensemble sizes and model tiers.
+\paragraph{Benchmarks and ensembling.} RewardBench \citep{lambert2025rewardbench} introduced a standardised benchmark for evaluating reward models across diverse categories; RewardBench~2 \citep{malik2025rewardbench2} extends this with a four-response rating protocol covering Factuality, Focus, Mathematics, Precise~IF, and Safety. Related benchmarks include JudgeBench \citep{tan2025judgebench}, which focuses on harder response pairs requiring domain expertise. We use RB2 throughout for its category diversity and best-of-4 format, which requires fine-grained score discrimination. The idea of aggregating multiple stochastic samples to reduce variance is well-established: \citet{wang2023selfconsistency} showed that sampling multiple chain-of-thought reasoning paths and taking the majority vote substantially improves accuracy on reasoning tasks, and \citet{verga2024replacing} proposed replacing a single judge with a panel of diverse models; \citet{chan2024chateval} explored a complementary multi-agent-debate setup. We investigate a related approach: ensembling multiple samples from a \emph{single} model using the API's \texttt{n} parameter, studied systematically across ensemble sizes and model tiers.
 
-\paragraph{Routing and prompt engineering.} Using cheap models for easy inputs and escalating when needed is a well-studied cost-reduction strategy: \citet{chen2024frugalgpt} introduced FrugalGPT, which chains LLM calls from cheapest to most expensive and stops when confidence is sufficient. Motivated by this, we investigate variance-based routing in the judge setting. On the prompting side, \citet{liu2023geval} introduced G-Eval, which uses chain-of-thought prompting and form-filling to improve NLG evaluation. These approaches add substantial prompt complexity; we instead investigate a minimal form of task-specific prompting: a single-sentence category-aware criterion appended to the existing RB2 prompt.
+\paragraph{Routing and prompt engineering.} Using cheap models for easy inputs and escalating when needed is a well-studied cost-reduction strategy: \citet{chen2024frugalgpt} introduced FrugalGPT, which chains LLM calls from cheapest to most expensive and stops when confidence is sufficient. Motivated by this, we investigate variance-based routing in the judge setting. On the prompting side, \citet{liu2023geval} introduced G-Eval, which uses chain-of-thought prompting and form-filling to improve NLG evaluation, and \citet{li2024generative} proposed generative judges that produce detailed evaluation rationales before scoring. These approaches add substantial prompt complexity; we instead investigate a minimal form of task-specific prompting: a single-sentence category-aware criterion appended to the existing RB2 prompt. We do not benchmark against finetuned judges like Prometheus~2 or against G-Eval directly on RB2 --- our focus is on drop-in improvements to a general-purpose judge, and a head-to-head comparison with specialised judges is deferred to future work.
 
 %----------------------------------------------------------
 \section{Experimental Setup}
@@ -181,21 +182,19 @@ The baseline condition applies the RB2 prompt verbatim with $k{=}1$ completion p
 
 \paragraph{Motivation.} At temperature $> 0$, an LLM judge defines a distribution over possible scores for a given response. A single sample from this distribution is noisy; taking the mean over $k$ independent completions is a Monte Carlo estimate of the expected score, reducing variance and improving accuracy.
 
-\paragraph{Method.} For each response, we request $k{=}8$ completions in a single API call (using the \texttt{n} parameter). The winning response is determined by the mean score across all $k$ draws:
+\paragraph{Method.} For each response, we request $k{=}8$ completions in a single API call (using the \texttt{n} parameter). The predicted winner $\hat{y}$ is the response index with the highest mean score across all $k$ draws:
 
 \begin{equation}
 \hat{y} = \argmax_{i}\; \bar{s}_i, \quad \bar{s}_i = \frac{1}{k}\sum_{j=1}^{k} s_{ij}
 \label{eq:ensemble}
 \end{equation}
 
-This reduces the tie rate dramatically (353 $\to$ 77), since ties require \emph{all} response means to be exactly equal across $k$ draws.
-
 \subsection{Task-Specific Criteria}
 \label{sec:criteria}
 
 \paragraph{Motivation.} The RB2 base prompt asks the judge to consider generic qualities: helpfulness, relevance, accuracy, depth, creativity, and detail. Different categories require different evaluation priorities. A judge evaluating a mathematics response should weight correctness of reasoning above creativity; a safety judge should prioritise appropriate refusal above detail. Injecting category-aware criteria sharpens the judge's focus at negligible cost.
 
-\paragraph{Method.} We append a one-sentence criterion to Note~1 of the base prompt, after the list of generic qualities. Criteria are \textbf{pre-registered} (committed to the repository before any experiment runs) to prevent post-hoc tuning; the full set is shown in Table~\ref{tab:criteria}.
+\paragraph{Method.} We append a one-sentence criterion to Note~1 of the base prompt, after the list of generic qualities. Criteria are fixed in advance of data collection --- committed to the repository before the first collection run to prevent post-hoc tuning; the full set is shown in Table~\ref{tab:criteria}. (This is an internal-repository commitment, not an external pre-registration registry.)
 
 \begin{table}[ht]
 \centering
@@ -215,7 +214,7 @@ Safety & \emph{``Focus on whether the response appropriately refuses harmful req
 \end{tabular}
 \end{table}
 
-Note~1 of the prompt is modified as follows (addition in \textbf{bold}):
+Note~1 of the prompt is modified as follows (shown for Math; other categories substitute their criterion from Table~\ref{tab:criteria}, addition in \textbf{bold}):
 
 \begin{lstlisting}[style=prompt]
 1- Your evaluation should consider factors such as the helpfulness, relevance,
@@ -231,14 +230,25 @@ All other parts of the prompt are unchanged.
 
 \paragraph{Motivation.} LLM judges are sensitive to anchoring effects: the same response may be rated differently depending on what other examples the judge has seen. Providing a concrete scored reference example from the same category anchors the judge's scoring scale, reducing inter-query variance.
 
-\paragraph{Method.} For each example being scored, we randomly select a different example from the same subset as a calibration reference. We score the calibration example's chosen response (response~0) using the full model with $k{=}1$, then inject it into the prompt as context before the target query. Calibration scores are cached within a run (each calibration example is scored at most once).
+\paragraph{Method.} For each example being scored, we randomly select a different example from the same category as a calibration reference. We score the calibration example's chosen response (response~0) using the full model with $k{=}1$, then inject it into the prompt as context before the target query. Calibration scores are cached within a run (each calibration example is scored at most once).
 
 The modified prompt (full listing in Appendix~\ref{sec:prompt-cal-single}) inserts a reference block with the scored example between the notes and the target query. We test four variants differing in the reference example type: \emph{high} (chosen, correct response), \emph{low} (rejected, incorrect), \emph{both} (one of each, showing the full score range), and \emph{cross-category} (example from a different category; control for category specificity).
 
 \subsection{Adaptive Escalation with Dual-Model Scoring}
 \label{sec:escalation}
 
-GPT-5.4 mini is ${\sim}3\times$ cheaper than the full model but somewhat less accurate. If we could identify which examples the mini model will get wrong, we could route only those to the full model, achieving high accuracy at low cost. We investigate three escalation strategies that use the mini model's per-response score variance as a routing signal: \emph{hard variance routing} (binary per-response routing above a variance threshold), \emph{sigmoid-weighted soft blending} (continuous per-response blend of mini and full scores), and \emph{variance-informed adaptive ensembling} (variable number of full-model calls per response). All strategies are evaluated offline on paired mini/full scores ($k{=}8$ each) collected in a single pass, requiring no additional API calls. Full method descriptions, equations, and variance analysis are in Appendix~\ref{sec:escalation-detail}.
+GPT-5.4 mini is ${\sim}3\times$ cheaper than the full model but somewhat less accurate. If we could identify which examples the mini model will get wrong, we could route only those to the full model. We investigate one such \emph{technique} --- variance-based escalation --- evaluated in three variants (hard routing, soft blending, variance-informed adaptive ensembling); we ultimately do not recommend any of the three, but the analysis shows \emph{why} and clarifies what role per-response variance plays as an uncertainty signal. We use the mini model's per-response score variance as the routing signal throughout.
+
+\paragraph{Variance as an error signal.} Per-response variance correlates weakly but systematically with correctness ($r = -0.13$, Figure~\ref{fig:variance-error}), and mini-model variance tracks full-model variance with $r = 0.421$, so mini variance is a \emph{detectable} (if noisy) uncertainty proxy; nano variance is much more weakly correlated ($r = 0.106$, Appendix~\ref{sec:escalation-detail}). Whether that signal can be \emph{exploited} by a routing scheme is a separate question: in RewardBench~2's best-of-4 setting, winner selection depends on the \emph{ordinal} ranking of four response means, so per-response variance must cross a large threshold to flip the winner --- a condition that holds only at the extremes, producing the Pareto ``dead zone'' we observe in Section~\ref{sec:main-results}.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{variance_error_signal.png}
+\caption{Distribution of ensemble score variance for correct vs incorrect judgments (baseline $k{=}8$, full model). Incorrect judgments exhibit modestly higher variance ($r{=}{-}0.13$). As a classifier of incorrectness, per-response variance reaches AUC${=}0.60$ with precision@recall(20\%)${=}0.32$ (base rate 0.19): a weak but statistically meaningful uncertainty signal.}
+\label{fig:variance-error}
+\end{figure}
+
+\paragraph{Strategies.} We investigate three escalation strategies that use this signal: \emph{hard variance routing} (binary per-response routing above a variance threshold), \emph{sigmoid-weighted soft blending} (continuous per-response blend of mini and full scores), and \emph{variance-informed adaptive ensembling} (variable number of full-model calls per response). All are evaluated offline on paired mini/full scores ($k{=}8$ each) collected in a single pass, requiring no additional API calls. Full method descriptions, equations, and correlation plots are in Appendix~\ref{sec:escalation-detail}.
 
 \subsection{Combined Condition}
 \label{sec:combined}
@@ -294,7 +304,7 @@ Var-inf.\ ($\leq$2, test)$^\ddagger$ & ${\sim}$343 & 74.9\% & --- & --- & --- & 
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{hero_accuracy.png}
-\caption{Accuracy by condition and category. Criteria $k{=}8$ (83.6\%) outperforms combined (82.6\%) at lower cost (5.3$\times$ vs 6.8$\times$ baseline). Precise~IF remains the hardest category across all conditions.}
+\caption{Accuracy by condition and category. Criteria $k{=}8$ (83.6\%) matches or slightly exceeds combined (82.6\%) at lower cost (5.3$\times$ vs 6.8$\times$ baseline); their CIs overlap and we interpret the ordering as a practical tie. Precise~IF remains the hardest category across all conditions.}
 \label{fig:hero-accuracy}
 \end{figure}
 
@@ -305,13 +315,40 @@ Var-inf.\ ($\leq$2, test)$^\ddagger$ & ${\sim}$343 & 74.9\% & --- & --- & --- & 
 \label{fig:pareto}
 \end{figure}
 
-\paragraph{Headline results.} The baseline reaches 71.7\% ($\pm$2.1pp) at \$0.013/ex. Criteria injection alone adds +3.0pp at $k{=}1$ (74.7\%) with negligible marginal cost, while $k{=}8$ ensembling adds +9.8pp (81.5\% at 5$\times$ cost). Combined, criteria $k{=}8$ reaches \textbf{83.6\%} (+11.9pp over baseline, 5.3$\times$ cost) --- the best result at its cost level.
+\paragraph{Headline results.} The baseline reaches 71.7\% ($\pm$2.1pp) at \$0.013/ex. Criteria injection alone adds +3.0pp at $k{=}1$ (74.7\%; paired bootstrap $\Delta{=}{+}2.9$pp, 95\% CI $[{+}1.1, {+}4.6]$, $p{>}0.999$) with negligible marginal cost --- a few extra input tokens per call, no structural change to the scoring protocol --- and modestly reduces the tie rate at $k{=}1$ (20.4\% baseline $\to$ 17.4\% criteria). Ensembling at $k{=}8$ adds +9.8pp (81.5\% at 5$\times$ cost) and sharply reduces the tie rate (baseline $k{=}1$: 20.4\%, $k{=}8$: 4.5\%), since ties now require all four response means to match exactly across $k$ draws. Together, criteria + ensembling reach \textbf{83.6\%} (+11.9pp over baseline, 5.3$\times$ cost) and further collapse the tie rate to 3.2\%, paired-significant against vanilla ensembling ($\Delta{=}{+}2.0$pp, 95\% CI $[{+}0.8, {+}3.3]$, $p{>}0.999$).
 
-\paragraph{Cheaper models benefit disproportionately.} Mini $k{=}8$ achieves 79.2\% at 1.2$\times$ baseline cost; adding criteria pushes it to 81.5\%, \textbf{matching the full model's vanilla $k{=}8$ ensemble at roughly one-quarter the cost}. Nano $k{=}8$ reaches 71.4\% at 0.4$\times$ baseline cost, approaching baseline-level accuracy. Most of the gain is captured by $k{=}3$ for all tiers (Figure~\ref{fig:diminishing-returns}); beyond that, returns diminish.
+\paragraph{Task-specific criteria: where gains concentrate.} The $k{=}1$ criteria gain is carried largely by Math (+12.0pp) and Safety (+3.3pp); Focus and Factuality move within their per-category CIs ($\pm$4pp) and should be read as directional. Precise~IF actually regresses slightly at $k{=}1$ (32.1\% vs baseline 34.0\%, well within noise), but $k{=}8$ ensembling recovers it to 48.8\%, so the per-category picture is most stable when criteria is combined with ensembling (full per-category CIs in Appendix~\ref{sec:per-cat-ci}). Criteria were fixed in advance of data collection (committed to the internal repository before the first collection run) to reduce risk of post-hoc criterion selection; this is an internal-repo timestamp, not an external registry.
 
-\paragraph{What doesn't work.} At $k{=}1$, calibration context provides +1--2pp (best variant: ``low'' at 73.8\%). \textbf{At $k{=}8$, calibration provides no additional benefit beyond ensembling alone}: all variants fall within $\pm$0.2pp of the vanilla ensemble (81.5\%, full k=8 cal.\ low: 81.7\%). The combined condition (criteria + calibration + dual-model) reaches 82.6\%, lower than criteria $k{=}8$ alone (83.6\%) at higher cost (6.8$\times$ vs 5.3$\times$). Soft blending achieves 83.2\% in-sample but fails to generalise: on a held-out test set, the base blend (80.2\%) does not beat full $k{=}8$ (81.5\%), indicating midpoint overfitting. Variance-informed routing at low budget (74.9\% at 1.6$\times$ cost) is dominated by mini $k{=}8$ (79.2\% at 1.2$\times$). Full calibration variant results are in Appendix~\ref{sec:calibration-detail}; full escalation analysis is in Appendix~\ref{sec:escalation-detail}.
+\paragraph{Cheaper models benefit disproportionately.} The practical operating-point story is mini + criteria: mini $k{=}8$ achieves 79.2\% at 1.2$\times$ baseline cost, and adding criteria pushes it to 81.5\%, \textbf{matching the full model's vanilla $k{=}8$ ensemble at roughly one-quarter the cost}. Nano $k{=}8$ sits at the extreme end of the cost-accuracy frontier: 71.4\% at 0.4$\times$ baseline cost approaches the full model's single-shot baseline, but at $k{=}8$ nano still trails mini $k{=}8$ by 7.8pp --- ensembling raises a lower-capability model's floor but not its ceiling. Ensembling's absolute per-call gain is largest for mini (+9.6pp from $k{=}1\to k{=}8$) consistent with (but not proof of) Jensen-type variance-reduction arguments; the nano $+$19.1pp gain benefits from both Jensen-type averaging and lower starting accuracy. Most of the gain is captured by $k{=}3$ for all tiers (Figure~\ref{fig:diminishing-returns}); beyond that, returns diminish.
 
-\paragraph{Robustness.} Sample sizes differ slightly across conditions ($N{=}1700$--$1746$) due to Azure content-filter refusals. Recomputing headline conditions on the intersection of ${\sim}$1710 examples succeeding under all four main collections changes accuracies by at most 0.2pp and preserves the ranking (Appendix~\ref{sec:intersection}). Precise~IF is the hardest category across all conditions (26--53\%); the combined condition provides the largest absolute improvement here (+18.5pp over baseline). A temperature sweep (Appendix~\ref{sec:additional-analyses}) confirms ensembling helps at all temperatures, with gains growing from +4.6pp at temp=0 to +9.8pp at temp=1.0; notably, \texttt{temperature=0} is not deterministic in practice (likely GPU floating-point non-determinism), so ensembling still helps.
+\paragraph{Calibration context.} All four calibration variants improve over baseline at $k{=}1$ by +1--2pp. The ``low'' variant (anchoring to a rejected response) slightly outperforms ``high'' (anchoring to the chosen response, 73.8\% vs 72.4\%) --- possibly because the judge finds it easier to distinguish the target from a known-bad anchor than to match a known-good one. Cross-category calibration performs identically to within-category (72.4\%), suggesting the benefit is context length and anchoring rather than category-specific transfer. \textbf{At $k{=}8$, however, calibration provides no additional benefit beyond ensembling alone}: all variants fall within $\pm$0.2pp of vanilla ensembling (81.5\%, cal.\ low: 81.7\%). The $k{=}8$ ensemble already reduces scoring noise enough that the anchoring benefit is redundant --- contrast with criteria, which provides +2.1pp even at $k{=}8$.
+
+\paragraph{Combined and blending.} The combined condition (criteria + calibration + dual-model ensembling) reaches 82.6\% at 6.8$\times$ baseline cost --- lower than criteria $k{=}8$ alone (83.6\% at 5.3$\times$), so stacking all interventions does not help. Soft blending achieves 83.2\% in-sample but fails to generalise: on a held-out test set, the base blend (80.2\%) does not beat full $k{=}8$ (81.5\%), indicating midpoint overfitting (Figure~\ref{fig:soft-blending-fig}). Variance-informed routing at low budget (74.9\% at 1.6$\times$ cost) is dominated by mini $k{=}8$ (79.2\% at 1.2$\times$). Hard variance routing traces a Pareto frontier with a large dead zone (Figure~\ref{fig:escalation-pareto}): escalating some but not all responses rarely changes the four-way winner, since accuracy depends on relative rankings, so meaningful operating points cluster near mini $k{=}8$ (cheap) or full $k{=}8$ (expensive) with little gain in between. Full calibration variant results are in Appendix~\ref{sec:calibration-detail}; full escalation analysis is in Appendix~\ref{sec:escalation-detail}.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{per_response_escalation_pareto.png}
+\caption{Pareto frontier for per-response hard variance routing. Each point is a different threshold $\theta$. The frontier has a large dead zone: escalating some but not all responses rarely changes the four-way winner.}
+\label{fig:escalation-pareto}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{variance_informed_ensembling.png}
+\caption{Pareto frontier for per-response variance-informed ensembling. Gray points: full grid of $(\sigma_1, \sigma_2)$ configurations (train-set). Stars: test-set accuracy for best overall (81.0\%) and budget-constrained (74.9\%) configurations --- the latter is dominated by mini $k{=}8$ at comparable cost.}
+\label{fig:var-informed}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{soft_blending.png}
+\caption{Per-response soft blending accuracy vs mean blend weight $w$ (full dataset, in-sample). Accuracy peaks at 83.2\% near $w{=}0.91$ (mostly full model). On a held-out test set, the blend (80.2\%) does not beat full $k{=}8$ (81.5\%) --- the in-sample gain is partly midpoint overfitting.}
+\label{fig:soft-blending-fig}
+\end{figure}
+
+\paragraph{Robustness.} Sample sizes differ slightly across conditions ($N{=}1700$--$1746$) due to Azure content-filter refusals. Recomputing headline conditions on the intersection of ${\sim}$1710 examples succeeding under all four main collections changes accuracies by at most 0.2pp and preserves the ranking (Appendix~\ref{sec:intersection}). Precise~IF is the hardest category across all conditions (26--53\%); the combined condition provides the largest absolute improvement here (+18.5pp over baseline).
+
+\paragraph{Temperature sensitivity.} At $k{=}1$, accuracy is stable across temperatures (71--73\%, CIs overlapping). At $k{=}8$, ensembling helps at all temperatures, with gains growing from +4.6pp at temp=0 (72.5\% $\to$ 77.1\%) to +9.8pp at temp=1.0 (71.7\% $\to$ 81.5\%). Surprisingly, even at temp=0 there is a significant +4.6pp $k{=}1$ vs $k{=}8$ gap with non-overlapping CIs: \texttt{temperature=0} does \emph{not} produce deterministic outputs in practice, likely due to GPU floating-point non-determinism and the absence of a \texttt{seed} parameter. Even deployments that assume deterministic scoring at temp=0 benefit from ensembling. Full sweep plot in Appendix~\ref{sec:additional-analyses}.
 
 \begin{figure}[t]
 \centering
@@ -343,7 +380,16 @@ Criteria + cal.\ (combined)       & 82.6 & 79.2 & --- \\
 
 Criteria is the only prompt technique that helps at $k{=}8$: +2.1pp for the full model, +2.3pp for mini. Calibration is a no-op at $k{=}8$ (+0.2pp, within noise), and \textbf{adding calibration to criteria actually hurts} --- the combined condition (82.6\%) is 1.0pp below criteria alone (83.6\%). Mini + criteria $k{=}8$ (81.5\%) matches full-model vanilla $k{=}8$ at one-quarter the cost, the optimal operating point for cost-constrained deployments.
 
-\paragraph{Practical recommendation.} The highest-value intervention is: (1) write a task-specific criterion and (2) set $k{=}3$--$8$. Neither requires finetuning, and both are drop-in additions to existing pipelines. More complex techniques (calibration, model routing, soft blending) provide diminishing marginal returns over this simple baseline.
+\paragraph{Mini vs full convergence.} We measure how quickly mini's winner selection converges to full as $k$ grows, using agreement (fraction of examples picking the same winner) and Spearman rank correlation over the four per-response means (Figure~\ref{fig:convergence}). Mini agreement approaches 78.7\% by $k{=}8$ and plateaus; the remaining gap is consistent with either systematic disagreement between the two models or irreducible scoring noise at this capability gap --- our data do not distinguish these. Nano agreement plateaus at ${\sim}$70\% with a lower rank-correlation ceiling (${\sim}$0.67 vs ${\sim}$0.79 for mini), consistent with a larger capability gap.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{mini_full_convergence.png}
+\caption{Model agreement with full ($k{=}8$) as a function of ensemble size. Mini plateaus at 78.7\% by $k{=}5$; nano plateaus at ${\sim}$70\%, with a lower rank-correlation ceiling (0.67 vs 0.79 for mini), confirming a larger capability gap.}
+\label{fig:convergence}
+\end{figure}
+
+\paragraph{Criteria + ensembling as a simple strong baseline.} Criteria $k{=}8$ (83.6\%) matches or slightly exceeds the full combined condition (82.6\%) at lower cost (5.3$\times$ vs 6.8$\times$); if you are already paying for $k{=}8$, adding criteria is a near-free +2.1pp upgrade over vanilla ensembling.
 
 %----------------------------------------------------------
 \section{Discussion and Conclusion}
@@ -354,20 +400,18 @@ Criteria is the only prompt technique that helps at $k{=}8$: +2.1pp for the full
 \begin{itemize}
   \item All experiments use a single judge model family (GPT-5.4); generalisability to other models (Claude, Gemini, open-weight) is untested.
   \item RewardBench~2 is a single benchmark; performance may differ on production judge tasks such as offline eval suites and real-time monitoring.
-  \item We set \texttt{reasoning\_effort="none"} for all conditions, which likely depresses absolute accuracy across the board. Since this is held constant, it does not affect relative comparisons.
-  \item We used a single set of author-designed criteria; sensitivity to wording variation is untested.
+  \item We set \texttt{reasoning\_effort="none"} throughout; we have not sanity-checked whether the +11.9pp criteria+ensembling gap persists at higher reasoning effort, and note that reasoning itself is a variance-reducing intervention that could substitute for ensembling at higher per-call cost.
+  \item We used a single set of author-designed criteria, fixed in the internal repository before the first collection run; sensitivity to wording variation and to external-registry-style pre-registration is untested.
+  \item RewardBench~2 examples are short (${\sim}$576 tokens on average); how these techniques, particularly ensembling and calibration context, scale to longer contexts (multi-turn conversations or document-length responses) is unknown.
+  \item We do not benchmark against finetuned judge baselines (Prometheus 2) or chain-of-thought judges (G-Eval) on RB2; our ``simple strong baseline'' claim is relative to the unmodified RB2 base prompt, not to specialised judge models.
+  \item Our bootstrap CIs capture sampling variance over examples; they do not capture run-to-run API variance, which Azure can introduce via silent deployment rotation. Results are from a single collection run and cross-run drift is unquantified.
 \end{itemize}
 
-\paragraph{Reproducibility.} All experiments were conducted via Azure OpenAI (GPT-5.4, mini, nano) during March--April 2026. Total API spend was approximately \$1,500. Code and raw data are available at \url{https://github.com/composo-ai/llm-judge-criteria-ensembling}.
+\paragraph{Interpretation: noise control, not new judgment.} Ensembling is Monte Carlo variance reduction: per-call variance drops as $1/k$ and the $k{=}1 \to k{=}8$ tie-rate collapse (20.4\% $\to$ 4.5\%) is its observable signature. Criteria injection does \emph{not} change per-response score variance (mean $\sigma_i{=}0.31$ vs 0.32; KS $p{=}0.88$) but sharpens \emph{between-response} discrimination (tie rate 4.5\% $\to$ 3.2\% at $k{=}8$; AUC for variance predicting incorrectness rises from 0.60 to 0.64). Techniques that don't work (calibration, model routing, soft blending) inject new information or combine heterogeneous distributions; at high $k$, residual variance is small enough that these contribute noise rather than signal.
 
-\paragraph{Conclusion.} We evaluated five candidate techniques on RewardBench~2. Two techniques dominate the cost--accuracy tradeoff:
-\begin{enumerate}
-  \item \textbf{Criteria injection}: +3.0pp at $k{=}1$ at essentially zero marginal cost. Pre-registration is important to prevent post-hoc criterion selection from inflating results.
-  \item \textbf{Ensembling}: +9.8pp at $k{=}8$; $k{=}3$ captures ${\sim}$70\% of the $k{=}8$ gain at 3/8 the cost. Combined with criteria, ensembling reaches \textbf{83.6\%} (+11.9pp), the best result at its cost level.
-\end{enumerate}
-Three additional techniques (calibration context, soft blending, variance-informed ensembling) improved over baseline but were dominated by criteria + ensembling at comparable or lower cost. For cost-constrained deployments, \textbf{GPT-5.4 mini with $k{=}8$} achieves 79.2\% at 1.2$\times$ baseline cost; adding criteria pushes it to 81.5\%, matching the full model's vanilla ensemble. The practical recommendation is simple: write a task-specific criterion and set $k{=}3$--$8$. Neither requires finetuning, and both are drop-in additions to any existing LLM judge pipeline.
+\paragraph{Reproducibility.} All experiments were conducted via Azure OpenAI API version \texttt{2025-04-01-preview} using GPT-5.4, GPT-5.4 mini, and GPT-5.4 nano deployments. Data was collected in March--April 2026. All API calls use temperature 1.0 with no seed parameter, so individual scores are not deterministically reproducible. Our bootstrap CIs reflect sampling variance over examples, not run-to-run API variance: Azure can silently rotate deployments, and we have not re-collected a headline condition to quantify cross-run drift. We recommend downstream users of these techniques re-benchmark on their own deployment. Total API spend across all collections was approximately \$1,500. All collection scripts write results incrementally and support resume. Code and raw data are available at \url{https://github.com/composo-ai/llm-judge-criteria-ensembling}.
 
-\paragraph{Future work.} The most important open question is \textbf{cross-model generalisation}: do criteria + ensembling provide similar gains with other judge models (Claude, Gemini, open-weight)?
+\paragraph{Conclusion.} On RewardBench~2, two drop-in techniques dominate the cost--accuracy tradeoff for GPT-family judges: \textbf{criteria injection} (+3.0pp at $k{=}1$, near-free) and \textbf{ensembling} (+9.8pp at $k{=}8$, with $k{=}3$ capturing ${\sim}$70\% of the gain); combined they reach \textbf{83.6\%} (+11.9pp). Three other techniques (calibration, soft blending, variance-informed routing) are dominated at comparable cost; do not stack speculatively, as at high $k$ variance-reduction techniques become substitutes.
 
 \FloatBarrier
 \bibliographystyle{icml2026}
@@ -491,7 +535,7 @@ Test-set rows from Table~\ref{tab:results-main} (Soft blend, Combined+blend, Var
 
 Conditions in Table~\ref{tab:results-main} have slightly different sample sizes ($N{=}1700$--$1746$) because Azure content filters refuse different prompts depending on prompt configuration. To verify that this refusal-driven sample variation does not bias the headline comparisons, we recompute accuracy on the \emph{intersection} of $N{=}1710$ examples that succeeded under all four main collections (baseline, criteria, calibration\_low, and combined). Table~\ref{tab:intersection} reports each headline condition's accuracy on its full sample alongside its accuracy on the intersection.
 
-\begin{table}[ht]
+\begin{table*}[ht]
 \centering
 \caption{Headline conditions evaluated on their full sample versus the intersection of $N{=}1710$ examples shared across baseline, criteria, calibration\_low, and combined collections.}
 \label{tab:intersection}
@@ -509,7 +553,7 @@ Cal.\ low ($k{=}8$)             & 1744 & 81.7\% & 81.7\% & $+$0.0 \\
 Combined (full $k{=}8$)         & 1746 & 82.6\% & 82.6\% & $-$0.0 \\
 \bottomrule
 \end{tabular}
-\end{table}
+\end{table*}
 
 %----------------------------------------------------------
 \section{Escalation Methods}
@@ -520,14 +564,7 @@ Combined (full $k{=}8$)         & 1746 & 82.6\% & 82.6\% & $-$0.0 \\
 
 \paragraph{Data collection.} We run both models (mini $n{=}8$, full $n{=}8$) on every example, giving paired data for all downstream strategies without additional API calls.
 
-\paragraph{Variance as an error signal.} Each response's score variance $\sigma_i = \text{std}(s_{i,1}, \ldots, s_{i,k})$ serves as the routing signal. Since each judge call is independent, all strategies operate at the per-response level: each response's own variance determines how it is scored. Pearson correlation between per-response variance and correctness is $r = -0.13$: high variance responses are slightly more likely to be judged incorrectly (Figure~\ref{fig:variance-error}). Mini and full model variances are positively correlated ($r = 0.421$), validating mini variance as a proxy for full model uncertainty. Nano variance shows a much weaker correlation with full model variance ($r = 0.106$), suggesting that nano's scoring noise is largely independent (Figure~\ref{fig:variance-corr}).
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=\columnwidth]{variance_error_signal.png}
-\caption{Distribution of ensemble score variance for correct vs incorrect judgments (full model, GPT-5.4). Incorrect judgments exhibit higher variance, validating variance as an error signal.}
-\label{fig:variance-error}
-\end{figure}
+\paragraph{Variance as a routing signal.} Each response's score variance $\sigma_i = \text{std}(s_{i,1}, \ldots, s_{i,k})$ serves as the routing signal. Since each judge call is independent, all strategies operate at the per-response level: each response's own variance determines how it is scored. The mini-vs-full correlation story is summarised in the main paper (Figure~\ref{fig:variance-error}); for completeness, Figure~\ref{fig:variance-corr} below shows the cross-tier variance correlation. Nano variance shows a much weaker correlation with full model variance ($r = 0.106$) than mini ($r = 0.421$), suggesting that nano's scoring noise is largely independent and its uncertainty is not a useful proxy for the full model's.
 
 \begin{figure}[t]
 \centering
@@ -593,7 +630,7 @@ Table~\ref{tab:escalation-summary} compares escalation strategies against the $k
 
 \begin{table}[ht]
 \centering
-\caption{Escalation strategy comparison.}
+\caption{Escalation strategy comparison. The test-set rows are the honest headline numbers; the ``full dataset (in-sample)'' soft-blend row is the tuned upper bound and should \emph{not} be compared on equal footing with the other rows.}
 \label{tab:escalation-summary}
 \begin{tabular}{lccc}
 \toprule
@@ -601,39 +638,21 @@ Strategy & Acc.\ & \$/ex & vs $k{=}1$ full \\
 \midrule
 $k{=}1$ full (baseline)            & 71.7\% & \$0.0133 & 1.0$\times$ \\
 Full $k{=}8$                       & 81.5\% & \$0.0663 & 5.0$\times$ \\
-Soft blend (full dataset)          & 83.2\% & \$0.0817 & 6.1$\times$ \\
+Soft blend (full dataset, tuned)$^\dagger$ & 83.2\% & \$0.0817 & 6.1$\times$ \\
 Soft blend (test set)              & 80.2\% & \$0.0817 & 6.1$\times$ \\
 Var-informed ($\leq$2, test)       & 74.9\% & ${\sim}$\$0.022 & 1.6$\times$ \\
 \bottomrule
 \end{tabular}
+
+\vspace{2pt}
+{\footnotesize $^\dagger$ Tuned-parameter in-sample optimistic upper bound, not comparable with the other rows. The test-set row (80.2\%) is the honest generalisation number.}
 \end{table}
 
-The hard variance routing variant traces a Pareto frontier with a large dead zone in the middle: escalating some but not all responses rarely changes the winner, since accuracy depends on relative rankings across all four responses (Figure~\ref{fig:escalation-pareto}). Meaningful operating points cluster near mini $k{=}8$ (cheap) or full $k{=}8$ (expensive).
+Figure~\ref{fig:escalation-pareto} in the main paper shows the hard variance routing Pareto frontier, with its characteristic dead zone in the middle --- escalating some but not all responses rarely changes the four-way winner, so meaningful operating points cluster at the mini-only or full-only extremes.
 
-\begin{figure}[t]
-\centering
-\includegraphics[width=\columnwidth]{per_response_escalation_pareto.png}
-\caption{Pareto frontier for per-response hard variance routing. Each point is a different threshold $\theta$.}
-\label{fig:escalation-pareto}
-\end{figure}
+On the full dataset (in-sample), soft blending achieves 83.2\% vs 81.5\% for full $k{=}8$ (see Figure~\ref{fig:soft-blending-fig} in the main paper). However, on a held-out test set the base blend (80.2\%) does not beat full $k{=}8$ (81.5\%), indicating midpoint overfitting; we therefore do not report blend numbers as a positive result in the main paper.
 
-On the full dataset (in-sample), soft blending achieves 83.2\% vs 81.5\% for full $k{=}8$ (Figure~\ref{fig:soft-blending-fig}). However, on a held-out test set the base blend (80.2\%) does not beat full $k{=}8$ (81.5\%), indicating midpoint overfitting. The benefit is more robust when combined with criteria + calibration: combined+blend reaches 84.8\% on the test set, outperforming combined full $k{=}8$ (82.6\%).
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=\columnwidth]{soft_blending.png}
-\caption{Per-response soft blending accuracy vs mean blend weight $w$ (full dataset, in-sample). Accuracy peaks at 83.2\% near $w = 0.91$ (mostly full model).}
-\label{fig:soft-blending-fig}
-\end{figure}
-
-The budget-constrained variance-informed variant restricts mean $n_{\text{full}} \leq 2.0$, achieving 74.9\% on the test set at 1.6$\times$ baseline cost (Figure~\ref{fig:var-informed}) --- barely above the baseline (71.7\%) and far below mini $k{=}8$ (79.2\% at 1.2$\times$).
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=\columnwidth]{variance_informed_ensembling.png}
-\caption{Pareto frontier for per-response variance-informed ensembling. Gray points: full grid of $(\sigma_1, \sigma_2)$ configurations (train-set). Stars: test-set accuracy for best overall (81.0\%) and budget-constrained (74.9\%) configurations.}
-\label{fig:var-informed}
-\end{figure}
+The budget-constrained variance-informed variant restricts mean $n_{\text{full}} \leq 2.0$, achieving 74.9\% on the test set at 1.6$\times$ baseline cost (see Figure~\ref{fig:var-informed} in the main paper) --- barely above the baseline (71.7\%) and far below mini $k{=}8$ (79.2\% at 1.2$\times$).
 
 %----------------------------------------------------------
 \section{Calibration Detail}
@@ -723,13 +742,6 @@ $k$ & Agreement & Rank corr ($\rho$) \\
 \end{tabular}
 \end{table}
 
-\begin{figure}[t]
-\centering
-\includegraphics[width=\columnwidth]{mini_full_convergence.png}
-\caption{Model agreement with full ($k{=}8$) as a function of ensemble size.}
-\label{fig:convergence}
-\end{figure}
-
-Mini agreement approaches ${\sim}$79\% by $k{=}5$; the ceiling reflects genuine systematic disagreement between the two models on ${\sim}$20\% of examples. Nano shows a qualitatively similar pattern but with a lower ceiling: agreement rises from ${\sim}$50\% at $k{=}1$ to ${\sim}$70\% at $k{=}8$, with rank correlation plateauing around 0.67 (vs 0.79 for mini).
+Mini agreement reaches 78.7\% by $k{=}8$; we cannot distinguish from this data whether the ceiling reflects systematic disagreement or residual noise at a capability gap. Nano shows a qualitatively similar pattern but with a lower ceiling: agreement rises from ${\sim}$50\% at $k{=}1$ to ${\sim}$70\% at $k{=}8$, with rank correlation plateauing around 0.67 (vs 0.79 for mini). Visualisation is in Figure~\ref{fig:convergence} (main paper).
 
 \end{document}
