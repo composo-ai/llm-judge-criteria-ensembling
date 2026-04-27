@@ -160,43 +160,45 @@ def plot_hero_accuracy(metrics):
 # ===================================================================
 
 def plot_pareto_frontier(metrics):
-    points = []  # (cost_per_ex, accuracy, label)
+    points = []  # (cost_per_ex, accuracy, label, offset)
 
-    # Only full-dataset conditions (no test-set numbers to avoid mixing protocols)
-    for key, label in [("baseline", "Baseline"), ("criteria", "Criteria (k=1)"),
-                       ("criteria_k8", "Criteria k=8"),
-                       ("ensemble_k8", "Ensemble k=8"), ("mini_k8", "Mini k=8"),
-                       ("nano_k8", "Nano k=8"),
-                       ("cal_low", "Calibration (low)"),
-                       ("combined", "Combined")]:
+    # Only full-dataset conditions (no test-set numbers to avoid mixing protocols).
+    # Offsets are (dx, dy) in data coords for label placement.
+    spec = [
+        ("baseline",         "Baseline",            (0.05, -0.004), "left"),
+        ("criteria",         "Criteria (k=1)",      (0.05, 0.004),  "left"),
+        ("criteria_k8",      "Criteria k=8",        (0.05, 0.004),  "left"),
+        ("ensemble_k8",      "Ensemble k=8",        (0.05, -0.004), "left"),
+        ("mini_k8",          "Mini k=8",            (0.05, 0.004),  "left"),
+        ("criteria_mini_k8", "Mini+Criteria k=8",   (0.05, 0.004),  "left"),
+        ("nano_k8",          "Nano k=8",            (-0.04, 0.000), "right"),
+        ("cal_low",          "Calibration (low)",   (0.05, -0.004), "left"),
+        ("combined",         "Combined",            (0.05, 0.004),  "left"),
+    ]
+    for key, label, off, ha in spec:
         m = metrics.get(key)
         if m and "accuracy" in m and "cost" in m:
-            points.append((m["cost"]["cost_per_example"], m["accuracy"]["overall"], label))
+            points.append((m["cost"]["cost_per_example"], m["accuracy"]["overall"], label, off, ha))
 
     if not points:
         print("  Skipping Pareto: no data")
         return
 
-    baseline_cost = next((c for c, a, l in points if l == "Baseline"), None)
+    baseline_cost = next((c for c, a, l, *_ in points if l == "Baseline"), None)
     if not baseline_cost:
         print("  Skipping Pareto: no baseline")
         return
 
-    from adjustText import adjust_text
+    fig, ax = plt.subplots(figsize=(14, 5))
+    rel = [(c / baseline_cost, a, l, o, h) for c, a, l, o, h in points]
 
-    fig, ax = plt.subplots(figsize=(10, 6))
-    rel = [(c / baseline_cost, a, l) for c, a, l in points]
-
-    texts = []
-    for rc, acc, label in rel:
+    for rc, acc, label, (dx, dy), ha in rel:
         color = COLORS.get(label, "gray")
         ax.scatter(rc, acc, s=80, color=color, zorder=5)
-        texts.append(ax.text(rc, acc, label, fontsize=8))
+        ax.text(rc + dx, acc + dy, label, fontsize=8, va="center", ha=ha)
 
-    adjust_text(texts, ax=ax, arrowprops=dict(arrowstyle="-", color="gray", lw=0.5))
-
-    # Pareto frontier
-    sorted_pts = sorted([(c, a) for c, a, _ in rel])
+    # Pareto frontier (monotone increasing accuracy with cost)
+    sorted_pts = sorted([(c, a) for c, a, _, _, _ in rel])
     frontier, best_acc = [], -1
     for c, a in sorted_pts:
         if a > best_acc:
@@ -280,22 +282,37 @@ def plot_variance_error_signal(metrics):
         else:
             incorrect_stds.append(ex_std)
 
-    fig, ax = plt.subplots(figsize=(8, 6))
+    auc_data = metrics.get("variance_auc", {}).get("baseline_k8", {})
+    auc = auc_data.get("auc")
+    fpr = auc_data.get("roc_fpr")
+    tpr = auc_data.get("roc_tpr")
+
+    fig, (ax, ax_roc) = plt.subplots(1, 2, figsize=(11, 5),
+                                      gridspec_kw={"width_ratios": [1, 1]})
     parts = ax.violinplot([correct_stds, incorrect_stds], positions=[0, 1],
                           showmeans=True, showmedians=True)
     for pc in parts["bodies"]:
         pc.set_alpha(0.7)
     ax.set_xticks([0, 1])
-    ax.set_xticklabels(["Correct", "Incorrect"])
+    ax.set_xticklabels([
+        f"Correct (n={len(correct_stds)})",
+        f"Incorrect (n={len(incorrect_stds)})",
+    ])
     ax.set_ylabel("Mean score std")
-    auc_data = metrics.get("variance_auc", {}).get("baseline_k8", {})
-    auc = auc_data.get("auc")
-    title = "Variance as Error Signal"
-    if auc is not None:
-        title += f"  (AUC = {auc:.3f})"
-    ax.set_title(title)
-    ax.text(0, ax.get_ylim()[1] * 0.95, f"n={len(correct_stds)}", ha="center", fontsize=9)
-    ax.text(1, ax.get_ylim()[1] * 0.95, f"n={len(incorrect_stds)}", ha="center", fontsize=9)
+    ax.set_title("Per-response variance by correctness")
+
+    if fpr and tpr and auc is not None:
+        ax_roc.plot(fpr, tpr, color="#4C72B0", lw=2, label=f"AUC = {auc:.3f}")
+        ax_roc.plot([0, 1], [0, 1], color="grey", ls="--", lw=1, label="Chance")
+        ax_roc.set_xlabel("False positive rate")
+        ax_roc.set_ylabel("True positive rate")
+        ax_roc.set_title("Variance as incorrectness classifier")
+        ax_roc.legend(loc="lower right")
+        ax_roc.set_xlim(0, 1)
+        ax_roc.set_ylim(0, 1)
+    else:
+        ax_roc.set_visible(False)
+
     _save(fig, "variance_error_signal")
 
 
