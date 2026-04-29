@@ -29,19 +29,20 @@ RAW_DIR = Path("results/raw")
 TABLES_DIR = Path("results/tables")
 
 COLORS = {
-    "Baseline": "#4C72B0",
-    "Ensemble k=8": "#DD8452",
-    "Criteria": "#55A868",
-    "Calibration (low)": "#8172B3",
-    "Calibration (high)": "#C44E52",
-    "Calibration (both)": "#937860",
-    "Calibration (cross)": "#DA8BC3",
-    "Mini k=8": "#CCB974",
-    "Nano k=8": "#64B5F6",
-    "Soft blend": "#E5AE38",
-    "Combined": "#B07AA1",
-    "Criteria k=8": "#76B7B2",
-    "Combined + blend": "#FF9DA7",
+    "Baseline": "#0173b2",
+    "Criteria": "#029e73",
+    "Criteria (k=1)": "#029e73",
+    "Calibration (low)": "#cc78bc",
+    "Calibration (high)": "#fbafe4",
+    "Calibration (both)": "#ca9161",
+    "Calibration (cross)": "#ece133",
+    "Ensemble k=8": "#de8f05",
+    "Mini k=8": "#ca9161",
+    "Nano k=8": "#56b4e9",
+    "Soft blend": "#fbafe4",
+    "Combined": "#949494",
+    "Criteria k=8": "#d55e00",
+    "Combined + blend": "#ece133",
 }
 
 
@@ -151,7 +152,7 @@ def plot_hero_accuracy(metrics):
     ax.set_xticklabels(subsets)
     ax.set_ylim(0, 1.05)
     ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f"{y:.0%}"))
-    ax.legend(loc="upper left", fontsize=8, bbox_to_anchor=(1.01, 1.0))
+    ax.legend(loc="upper left", fontsize=13, bbox_to_anchor=(1.01, 1.0))
     _save(fig, "hero_accuracy")
 
 
@@ -160,43 +161,49 @@ def plot_hero_accuracy(metrics):
 # ===================================================================
 
 def plot_pareto_frontier(metrics):
-    points = []  # (cost_per_ex, accuracy, label)
+    points = []  # (cost_per_ex, accuracy, label, offset)
 
-    # Only full-dataset conditions (no test-set numbers to avoid mixing protocols)
-    for key, label in [("baseline", "Baseline"), ("criteria", "Criteria (k=1)"),
-                       ("criteria_k8", "Criteria k=8"),
-                       ("ensemble_k8", "Ensemble k=8"), ("mini_k8", "Mini k=8"),
-                       ("nano_k8", "Nano k=8"),
-                       ("cal_low", "Calibration (low)"),
-                       ("combined", "Combined")]:
+    # Only full-dataset conditions (no test-set numbers to avoid mixing protocols).
+    # Offsets are (dx, dy) in data coords for label placement.
+    spec = [
+        ("baseline",         "Baseline",            (0.05, -0.004), "left"),
+        ("criteria",         "Criteria (k=1)",      (0.05, 0.004),  "left"),
+        ("criteria_k8",      "Criteria k=8",        (0.05, 0.004),  "left"),
+        ("ensemble_k8",      "Ensemble k=8",        (0.05, -0.004), "left"),
+        ("mini_k8",          "Mini k=8",            (0.05, 0.004),  "left"),
+        ("criteria_mini_k8", "Mini+Criteria k=8",   (0.05, 0.004),  "left"),
+        ("nano_k8",          "Nano k=8",            (-0.04, 0.000), "right"),
+        ("cal_low",          "Calibration (low)",   (0.05, -0.004), "left"),
+        ("combined",         "Combined",            (0.05, 0.004),  "left"),
+    ]
+    for key, label, off, ha in spec:
         m = metrics.get(key)
         if m and "accuracy" in m and "cost" in m:
-            points.append((m["cost"]["cost_per_example"], m["accuracy"]["overall"], label))
+            points.append((m["cost"]["cost_per_example"], m["accuracy"]["overall"], label, off, ha))
 
     if not points:
         print("  Skipping Pareto: no data")
         return
 
-    baseline_cost = next((c for c, a, l in points if l == "Baseline"), None)
+    baseline_cost = next((c for c, a, l, *_ in points if l == "Baseline"), None)
     if not baseline_cost:
         print("  Skipping Pareto: no baseline")
         return
 
-    from adjustText import adjust_text
+    fig, ax = plt.subplots(figsize=(6, 5))
+    rel = [(c / baseline_cost, a, l, o, h) for c, a, l, o, h in points]
 
-    fig, ax = plt.subplots(figsize=(10, 6))
-    rel = [(c / baseline_cost, a, l) for c, a, l in points]
-
-    texts = []
-    for rc, acc, label in rel:
+    for rc, acc, label, (dx, dy), ha in rel:
         color = COLORS.get(label, "gray")
-        ax.scatter(rc, acc, s=80, color=color, zorder=5)
-        texts.append(ax.text(rc, acc, label, fontsize=8))
+        ax.scatter(rc, acc, s=60, color=color, zorder=5)
+        px = 6 if ha == "left" else -6
+        py = 0 if abs(dy) < 1e-6 else (4 if dy > 0 else -4)
+        ax.annotate(label, (rc, acc), xytext=(px, py),
+                    textcoords="offset points", fontsize=8,
+                    va="center", ha=ha)
 
-    adjust_text(texts, ax=ax, arrowprops=dict(arrowstyle="-", color="gray", lw=0.5))
-
-    # Pareto frontier
-    sorted_pts = sorted([(c, a) for c, a, _ in rel])
+    # Pareto frontier (monotone increasing accuracy with cost)
+    sorted_pts = sorted([(c, a) for c, a, _, _, _ in rel])
     frontier, best_acc = [], -1
     for c, a in sorted_pts:
         if a > best_acc:
@@ -206,11 +213,15 @@ def plot_pareto_frontier(metrics):
         fx, fy = zip(*frontier)
         ax.plot(fx, fy, "k--", alpha=0.3, lw=1)
 
+    ax.set_xscale("log")
+    ax.set_xlim(0.3, 12)
+    ax.set_xticks([0.5, 1, 2, 5, 10])
+    ax.set_xticks([], minor=True)
     ax.set_xlabel("Cost (x baseline)")
     ax.set_ylabel("Accuracy")
     ax.set_title("Cost-Accuracy Pareto Frontier")
     ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f"{y:.0%}"))
-    ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f"{x:.1f}x"))
+    ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f"{x:g}x"))
     _save(fig, "pareto_frontier")
 
 
@@ -255,42 +266,25 @@ def plot_diminishing_returns(metrics):
 # ===================================================================
 
 def plot_variance_error_signal(metrics):
-    data = _find_collection("base_both")
-    if not data:
-        print("  Skipping variance figure: no base collection")
+    auc_data = metrics.get("variance_auc", {}).get("baseline_k8", {})
+    auc = auc_data.get("auc")
+    fpr = auc_data.get("roc_fpr")
+    tpr = auc_data.get("roc_tpr")
+
+    if not (fpr and tpr and auc is not None):
+        print("  Skipping variance ROC figure: no AUC data")
         return
 
-    correct_stds, incorrect_stds = [], []
-    for r in data:
-        scores_per_resp = r.get("full_scores")
-        if not scores_per_resp:
-            continue
-        stds, means = [], []
-        for scores in scores_per_resp:
-            valid = [s for s in scores if s is not None]
-            stds.append(float(np.std(valid)) if len(valid) > 1 else 0.0)
-            means.append(float(np.mean(valid)) if valid else None)
-        if any(m is None for m in means):
-            continue
-        ex_std = float(np.mean(stds))
-        max_s = max(means)
-        winners = [i for i, m in enumerate(means) if m == max_s]
-        if len(winners) == 1 and winners[0] == 0:
-            correct_stds.append(ex_std)
-        else:
-            incorrect_stds.append(ex_std)
+    fig, ax = plt.subplots(figsize=(6, 5))
+    ax.plot(fpr, tpr, color="#4C72B0", lw=2, label=f"AUC = {auc:.3f}")
+    ax.plot([0, 1], [0, 1], color="grey", ls="--", lw=1, label="Chance")
+    ax.set_xlabel("False positive rate")
+    ax.set_ylabel("True positive rate")
+    ax.set_title("Variance as incorrectness classifier")
+    ax.legend(loc="lower right")
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
 
-    fig, ax = plt.subplots(figsize=(8, 6))
-    parts = ax.violinplot([correct_stds, incorrect_stds], positions=[0, 1],
-                          showmeans=True, showmedians=True)
-    for pc in parts["bodies"]:
-        pc.set_alpha(0.7)
-    ax.set_xticks([0, 1])
-    ax.set_xticklabels(["Correct", "Incorrect"])
-    ax.set_ylabel("Mean score std")
-    ax.set_title("Variance as Error Signal")
-    ax.text(0, ax.get_ylim()[1] * 0.95, f"n={len(correct_stds)}", ha="center", fontsize=9)
-    ax.text(1, ax.get_ylim()[1] * 0.95, f"n={len(incorrect_stds)}", ha="center", fontsize=9)
     _save(fig, "variance_error_signal")
 
 

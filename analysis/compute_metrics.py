@@ -652,6 +652,222 @@ def compute_ensemble_convergence(
 
 
 # ===================================================================
+# Paired bootstrap (per-example correctness vectors)
+# ===================================================================
+
+def _per_example_correctness(data, model: str, k_subset: int | None = None) -> dict[str, int]:
+    """Return {id: 1/0} for correctness on each example. Ties count as 0."""
+    key = f"{model}_scores"
+    out: dict[str, int] = {}
+    for r in data:
+        scores_per_resp = r.get(key)
+        if scores_per_resp is None:
+            continue
+        means = []
+        for scores in scores_per_resp:
+            s = scores[:k_subset] if k_subset else scores
+            means.append(_mean_ignoring_none(s))
+        if any(m is None for m in means):
+            continue
+        max_s = max(means)
+        winners = [i for i, m in enumerate(means) if m == max_s]
+        out[r["id"]] = 1 if (len(winners) == 1 and winners[0] == 0) else 0
+    return out
+
+
+def paired_bootstrap(
+    data_a, data_b, model_a: str, model_b: str,
+    k_a: int | None = None, k_b: int | None = None,
+    n_bootstrap: int = 2000, alpha: float = 0.05, seed: int = 42,
+) -> dict:
+    """Paired bootstrap on the intersection of examples.
+
+    Returns:
+        {n, mean_delta, ci_low, ci_high, p_a_gt_b, acc_a, acc_b}
+    """
+    corr_a = _per_example_correctness(data_a, model_a, k_a)
+    corr_b = _per_example_correctness(data_b, model_b, k_b)
+    shared = sorted(set(corr_a) & set(corr_b))
+    if not shared:
+        return {"n": 0}
+    a = np.array([corr_a[i] for i in shared], dtype=float)
+    b = np.array([corr_b[i] for i in shared], dtype=float)
+    n = len(shared)
+    rng = np.random.RandomState(seed)
+    deltas = np.empty(n_bootstrap, dtype=float)
+    for i in range(n_bootstrap):
+        idx = rng.randint(0, n, size=n)
+        deltas[i] = a[idx].mean() - b[idx].mean()
+    return {
+        "n": n,
+        "acc_a": float(a.mean()),
+        "acc_b": float(b.mean()),
+        "mean_delta": float(deltas.mean()),
+        "ci_low": float(np.percentile(deltas, alpha / 2 * 100)),
+        "ci_high": float(np.percentile(deltas, (1 - alpha / 2) * 100)),
+        "p_a_gt_b": float((deltas > 0).mean()),
+    }
+
+
+# ===================================================================
+# Per-response variance distribution + KS test
+# ===================================================================
+
+def _per_example_variance(data, model: str, k_subset: int | None = None) -> list[float]:
+    """Mean across 4 responses of per-response score std."""
+    key = f"{model}_scores"
+    out = []
+    for r in data:
+        scores_per_resp = r.get(key)
+        if scores_per_resp is None:
+            continue
+        stds = []
+        for scores in scores_per_resp:
+            s = scores[:k_subset] if k_subset else scores
+            valid = [v for v in s if v is not None]
+            stds.append(float(np.std(valid)) if len(valid) > 1 else 0.0)
+        if stds:
+            out.append(float(np.mean(stds)))
+    return out
+
+
+def per_response_variance_by_condition(
+    conditions: list[tuple[str, list[dict], str, int | None]],
+) -> dict:
+    """Compute σ_i distributions per condition and pairwise KS tests.
+
+    Args:
+        conditions: list of (name, data, model, k_subset).
+
+    Returns:
+        {per_condition: {name: {mean, median, std, n}}, ks_tests: {a_vs_b: {...}}}
+    """
+    per_cond = {}
+    arrs: dict[str, list[float]] = {}
+    for name, data, model, k in conditions:
+        arr = _per_example_variance(data, model, k)
+        arrs[name] = arr
+        per_cond[name] = {
+            "mean": float(np.mean(arr)) if arr else 0.0,
+            "median": float(np.median(arr)) if arr else 0.0,
+            "std": float(np.std(arr)) if arr else 0.0,
+            "n": len(arr),
+        }
+
+    ks = {}
+    names = list(arrs)
+    for i, a in enumerate(names):
+        for b in names[i + 1:]:
+            if arrs[a] and arrs[b]:
+                stat, p = stats.ks_2samp(arrs[a], arrs[b])
+                ks[f"{a}_vs_{b}"] = {
+                    "ks_statistic": float(stat),
+                    "p_value": float(p),
+                    "mean_delta": per_cond[b]["mean"] - per_cond[a]["mean"],
+                }
+    return {"per_condition": per_cond, "ks_tests": ks}
+
+
+# ===================================================================
+# Variance as a classifier for incorrectness (ROC-AUC)
+# ===================================================================
+
+def variance_as_classifier_auc(data, model: str = "full", k_subset: int | None = None) -> dict:
+    """Treat per-example variance as a score for 'is incorrect'.
+
+    Returns:
+        {auc, n_incorrect, n_correct, precision_at_recall_20, precision_at_recall_50}
+    """
+    key = f"{model}_scores"
+    variances = []
+    incorrect = []
+    for r in data:
+        scores_per_resp = r.get(key)
+        if scores_per_resp is None:
+            continue
+        stds = []
+        means = []
+        for scores in scores_per_resp:
+            s = scores[:k_subset] if k_subset else scores
+            valid = [v for v in s if v is not None]
+            stds.append(float(np.std(valid)) if len(valid) > 1 else 0.0)
+            means.append(_mean_ignoring_none(s))
+        if any(m is None for m in means):
+            continue
+        max_s = max(means)
+        winners = [i for i, m in enumerate(means) if m == max_s]
+        is_correct = (len(winners) == 1 and winners[0] == 0)
+        variances.append(float(np.mean(stds)))
+        incorrect.append(0 if is_correct else 1)
+
+    if not variances or sum(incorrect) == 0 or sum(incorrect) == len(incorrect):
+        return {"auc": None, "n": len(variances)}
+
+    var_arr = np.array(variances)
+    lbl = np.array(incorrect)
+
+    # ROC-AUC: fraction of (incorrect, correct) pairs ranked correctly.
+    order = np.argsort(-var_arr)
+    sorted_lbl = lbl[order]
+    n_pos = lbl.sum()
+    n_neg = len(lbl) - n_pos
+    tp = 0
+    fp = 0
+    tpr = [0.0]
+    fpr = [0.0]
+    precisions = []
+    recalls = []
+    for y in sorted_lbl:
+        if y == 1:
+            tp += 1
+        else:
+            fp += 1
+        tpr.append(tp / n_pos)
+        fpr.append(fp / n_neg)
+        precisions.append(tp / (tp + fp))
+        recalls.append(tp / n_pos)
+    auc = float(np.trapezoid(tpr, fpr))
+
+    def _precision_at_recall(target: float) -> float | None:
+        for p, r in zip(precisions, recalls):
+            if r >= target:
+                return float(p)
+        return None
+
+    return {
+        "auc": auc,
+        "n": len(variances),
+        "n_incorrect": int(n_pos),
+        "n_correct": int(n_neg),
+        "precision_at_recall_20": _precision_at_recall(0.20),
+        "precision_at_recall_50": _precision_at_recall(0.50),
+        "base_rate_incorrect": float(n_pos / len(lbl)),
+        "roc_fpr": [float(x) for x in fpr],
+        "roc_tpr": [float(x) for x in tpr],
+    }
+
+
+# ===================================================================
+# Tie rate by condition (surface existing counts cleanly)
+# ===================================================================
+
+def tie_rate_by_condition(
+    conditions: list[tuple[str, list[dict], str, int | None]],
+) -> dict:
+    """Surface tie counts for each condition using compute_accuracy."""
+    out = {}
+    for name, data, model, k in conditions:
+        acc = compute_accuracy(data, model=model, k_subset=k)
+        n = acc["n"]
+        out[name] = {
+            "n": n,
+            "n_tied": acc["n_tied"],
+            "tie_rate": acc["n_tied"] / n if n else 0.0,
+        }
+    return out
+
+
+# ===================================================================
 # Main: derive all conditions from collections
 # ===================================================================
 
@@ -970,6 +1186,86 @@ def main():
             m = _condition_metrics(name, data, model=model, k=k, use_intersection=True)
             print(f"    {name}: {m['accuracy']['overall']:.3f} (n={m['n']})")
             all_metrics[f"intersection_{name}"] = m
+
+    # === 7. Reviewer-mandated analyses ===
+    print(f"\n{'='*60}")
+    print("REVIEWER-MANDATED ANALYSES")
+    print(f"{'='*60}")
+
+    # Paired bootstrap — the three claims from the response plan
+    pb_results = {}
+    if base and criteria:
+        pb_results["criteria_k1_vs_base_k1"] = paired_bootstrap(
+            criteria[1], base[1], "full", "full", k_a=1, k_b=1)
+        pb_results["criteria_k8_vs_ensemble_k8"] = paired_bootstrap(
+            criteria[1], base[1], "full", "full", k_a=8, k_b=8)
+    if combined and base:
+        pb_results["combined_k8_vs_ensemble_k8"] = paired_bootstrap(
+            combined[1], base[1], "full", "full", k_a=8, k_b=8)
+    if combined and criteria:
+        pb_results["criteria_k8_vs_combined_k8"] = paired_bootstrap(
+            criteria[1], combined[1], "full", "full", k_a=8, k_b=8)
+    all_metrics["paired_bootstrap"] = pb_results
+    print("\n  Paired bootstrap (intersection, n_resamples=2000):")
+    for name, r in pb_results.items():
+        if r.get("n"):
+            print(f"    {name}: Δ={r['mean_delta']*100:+.2f}pp "
+                  f"[{r['ci_low']*100:+.2f}, {r['ci_high']*100:+.2f}] "
+                  f"p(a>b)={r['p_a_gt_b']:.3f} n={r['n']}")
+
+    # Per-response variance by condition
+    var_conditions = []
+    if base:
+        var_conditions.append(("baseline_k8", base[1], "full", 8))
+    if criteria:
+        var_conditions.append(("criteria_k8", criteria[1], "full", 8))
+    if combined:
+        var_conditions.append(("combined_k8", combined[1], "full", 8))
+    if var_conditions:
+        vr = per_response_variance_by_condition(var_conditions)
+        all_metrics["per_response_variance"] = vr
+        print("\n  Per-response variance by condition (mean σ_i):")
+        for name, stats_d in vr["per_condition"].items():
+            print(f"    {name}: mean={stats_d['mean']:.4f} "
+                  f"median={stats_d['median']:.4f} n={stats_d['n']}")
+        for name, ks in vr["ks_tests"].items():
+            print(f"    KS {name}: D={ks['ks_statistic']:.3f} p={ks['p_value']:.4f}")
+
+    # Variance as classifier AUC
+    auc_results = {}
+    if base:
+        auc_results["baseline_k8"] = variance_as_classifier_auc(base[1], "full", 8)
+    if criteria:
+        auc_results["criteria_k8"] = variance_as_classifier_auc(criteria[1], "full", 8)
+    all_metrics["variance_auc"] = auc_results
+    print("\n  Variance as incorrectness classifier (ROC-AUC):")
+    for name, r in auc_results.items():
+        if r.get("auc") is not None:
+            print(f"    {name}: AUC={r['auc']:.3f} "
+                  f"P@R20={r['precision_at_recall_20']:.3f} "
+                  f"P@R50={r['precision_at_recall_50']:.3f} "
+                  f"base_rate={r['base_rate_incorrect']:.3f} n={r['n']}")
+
+    # Tie rate by condition
+    tie_conditions = []
+    if base:
+        tie_conditions += [
+            ("baseline_k1", base[1], "full", 1),
+            ("baseline_k8", base[1], "full", 8),
+        ]
+    if criteria:
+        tie_conditions += [
+            ("criteria_k1", criteria[1], "full", 1),
+            ("criteria_k8", criteria[1], "full", 8),
+        ]
+    if combined:
+        tie_conditions.append(("combined_k8", combined[1], "full", 8))
+    if tie_conditions:
+        tr = tie_rate_by_condition(tie_conditions)
+        all_metrics["tie_rate"] = tr
+        print("\n  Tie rates:")
+        for name, t in tr.items():
+            print(f"    {name}: {t['n_tied']}/{t['n']} = {t['tie_rate']:.3f}")
 
     # --- Save ---
     output = TABLES_DIR / "all_metrics.json"

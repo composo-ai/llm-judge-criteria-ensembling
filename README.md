@@ -1,11 +1,11 @@
-# An Empirical Investigation of Practical LLM-as-a-Judge Improvement Techniques on RewardBench 2
+# On Cost-Effective LLM-as-a-Judge Improvement Techniques
 
 **Author:** Ryan Lail<br>
 **Affiliation:** Composo AI
 
 We systematically tested five techniques for improving LLM judge accuracy on [RewardBench 2](https://huggingface.co/datasets/allenai/reward-bench-2) and found that three simple, drop-in changes improve accuracy from 71.7% to 83.6%. No fine-tuning required.
 
-**Paper:** [An Empirical Investigation of Practical LLM-as-a-Judge Improvement Techniques on RewardBench 2](https://arxiv.org/abs/2604.13717) | **Blog post:** [Improving LLM Judges With Experiments, Not Vibes](https://www.composo.ai/post/llm-judge-criteria-ensembling/) | **Full methodology:** [TECHNICAL_REPORT.md](TECHNICAL_REPORT.md)
+**Paper:** [On Cost-Effective LLM-as-a-Judge Improvement Techniques](https://arxiv.org/abs/2604.13717) | **Blog post:** [Improving LLM Judges With Experiments, Not Vibes](https://www.composo.ai/post/llm-judge-criteria-ensembling/)
 
 ## What Works
 
@@ -102,7 +102,6 @@ All accuracy deltas in percentage points (pp). 95% bootstrap CIs shown. Conditio
 ├── run_all.sh                  # Run all collections sequentially
 ├── requirements.txt            # Python dependencies
 ├── .env.example                # Template for Azure OpenAI credentials
-├── TECHNICAL_REPORT.md         # Full methodology and analysis
 ├── LICENSE
 ├── analysis/
 │   ├── compute_metrics.py      # Derive conditions, compute metrics + CIs
