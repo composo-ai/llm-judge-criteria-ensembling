@@ -17,7 +17,9 @@ Usage:
 import argparse
 import asyncio
 import json
+import os
 import random
+import shutil
 import sys
 import time
 from collections import defaultdict
@@ -30,6 +32,30 @@ from judge import TASK_CRITERIA, build_user_message, parse_score
 MODEL_MAP = {
     "full": "claude-sonnet-4-6",
     "mini": "claude-haiku-4-5-20251001",
+}
+
+# Resolve absolute path to claude CLI at import time so subprocess spawns
+# don't depend on PATH inheritance across asyncio.
+#
+# The CLAUDE_BIN env var lets the user point at a frozen copy of the binary
+# (e.g. `cp -r ~/.npm-global/lib/node_modules/@anthropic-ai/claude-code /tmp/
+# claude-frozen` then `export CLAUDE_BIN=/tmp/claude-frozen/cli.js`).  This
+# avoids race conditions where claude's auto-updater briefly deletes the
+# binary mid-run while concurrent subprocess spawns are happening.
+CLAUDE_BIN = os.environ.get("CLAUDE_BIN") or shutil.which("claude")
+if CLAUDE_BIN is None:
+    print("ERROR: 'claude' CLI not found. Set CLAUDE_BIN env var or install on PATH.",
+          file=sys.stderr)
+    sys.exit(1)
+
+# Disable claude CLI auto-updater for subprocess calls. Auto-updates can
+# briefly delete and re-create the binary, causing FileNotFoundError in
+# concurrent subprocess spawns.
+CLAUDE_ENV = {
+    **os.environ,
+    "DISABLE_AUTOUPDATER": "1",
+    "CLAUDE_CODE_DISABLE_AUTO_UPDATE": "1",
+    "CLAUDE_CONFIG_DIR": os.path.expanduser("~/.claude-bigdaddy"),
 }
 
 
@@ -54,38 +80,83 @@ def output_filename(prompt: str, k: int) -> str:
 # Claude CLI interface
 # ---------------------------------------------------------------------------
 
+RATE_LIMIT_KEYWORDS = (
+    "rate limit",
+    "rate-limit",
+    "ratelimit",
+    "429",
+    "too many requests",
+    "quota",
+    "usage limit",
+    "5-hour",
+    "5 hour",
+    "five hour",
+    "reset",
+    "try again",
+    "exceeded",
+)
+
+# Permanent content-policy refusals from the Claude Code wrapper. These do
+# not get better with retries, so we skip the call immediately and let the
+# example be marked as refused.
+POLICY_REFUSAL_KEYWORDS = (
+    "claude code is unable to respond",
+    "violate our usage policy",
+    "violate our acceptable use",
+    "violates our usage policy",
+)
+
+
+def _looks_like_rate_limit(text: str) -> bool:
+    if not text:
+        return False
+    lower = text.lower()
+    return any(kw in lower for kw in RATE_LIMIT_KEYWORDS)
+
+
+def _looks_like_policy_refusal(text: str) -> bool:
+    if not text:
+        return False
+    lower = text.lower()
+    return any(kw in lower for kw in POLICY_REFUSAL_KEYWORDS)
+
+
 async def call_claude_cli(
     user_message: str,
     model: str,
     semaphore: asyncio.Semaphore,
     timeout_s: int = 120,
+    max_transient_retries: int = 5,
     max_parse_retries: int = 3,
 ) -> dict:
     """Call the claude CLI once and return parsed result.
 
-    Retries indefinitely on transient errors (rate limits, timeouts, CLI
-    errors) with backoff capped at 60s.  Only gives up on permanent
-    failures (auth) or after max_parse_retries score-parse failures.
+    Retry policy:
+      - Rate-limit errors: retry indefinitely with backoff capped at 60s
+      - Other transient errors (timeouts, json parse, non-zero exit without
+        rate-limit keywords): retry up to max_transient_retries times
+      - Score parse failures: retry up to max_parse_retries times
+      - "Not logged in": fatal, exit immediately
     """
-    attempt = 0
+    transient_failures = 0
     parse_failures = 0
+    rate_limit_attempts = 0
 
     while True:
-        attempt += 1
-        wait = min(2 ** attempt, 60)
-
         try:
             async with semaphore:
                 proc = await asyncio.create_subprocess_exec(
-                    "claude", "-p",
+                    CLAUDE_BIN, "-p",
                     "--output-format", "json",
                     "--model", model,
+                    "--effort", "low",
                     "--system-prompt", "",
                     "--tools", "",
                     "--no-session-persistence",
                     stdin=asyncio.subprocess.PIPE,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
+                    env=CLAUDE_ENV,
                 )
                 stdout, stderr = await asyncio.wait_for(
                     proc.communicate(input=user_message.encode()),
@@ -94,22 +165,97 @@ async def call_claude_cli(
         except asyncio.TimeoutError:
             proc.kill()
             await proc.wait()
-            print(f"    [retry] timeout ({model}), waiting {wait}s...",
+            transient_failures += 1
+            if transient_failures > max_transient_retries:
+                return {
+                    "score": None,
+                    "error": "timeout (max retries)",
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                }
+            wait = min(2 ** transient_failures, 60)
+            print(f"    [retry] timeout ({model}) "
+                  f"[{transient_failures}/{max_transient_retries}], "
+                  f"waiting {wait}s...", flush=True)
+            await asyncio.sleep(wait)
+            continue
+        except FileNotFoundError:
+            # Claude CLI auto-update may briefly delete the binary.
+            # Treat as transient and retry.
+            transient_failures += 1
+            if transient_failures > max_transient_retries:
+                return {
+                    "score": None,
+                    "error": f"binary missing: {CLAUDE_BIN}",
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                }
+            wait = min(2 ** transient_failures, 60)
+            print(f"    [retry] claude binary missing (auto-update?), "
+                  f"waiting {wait}s "
+                  f"[{transient_failures}/{max_transient_retries}]...",
                   flush=True)
             await asyncio.sleep(wait)
             continue
 
         if proc.returncode != 0:
-            print(f"    [retry] cli exit {proc.returncode} ({model}), "
-                  f"waiting {wait}s...", flush=True)
+            # Try to extract a clean error message from the JSON output
+            # (claude -p --output-format json puts errors in result field).
+            stderr_text = stderr.decode().strip()
+            stdout_text = stdout.decode().strip()
+            err_text = stderr_text or stdout_text
+            try:
+                err_data = json.loads(stdout_text)
+                if isinstance(err_data, dict):
+                    err_text = err_data.get("result") or err_text
+            except (json.JSONDecodeError, ValueError):
+                pass
+            # Policy refusals are permanent — give up immediately, no retry.
+            if _looks_like_policy_refusal(err_text):
+                return {
+                    "score": None,
+                    "error": "policy_refusal",
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                }
+            if _looks_like_rate_limit(err_text):
+                rate_limit_attempts += 1
+                wait = min(2 ** min(rate_limit_attempts, 6), 60)
+                print(f"    [rate-limit] cli exit {proc.returncode} ({model}): "
+                      f"{err_text} -- waiting {wait}s "
+                      f"(attempt {rate_limit_attempts})...", flush=True)
+                await asyncio.sleep(wait)
+                continue
+            transient_failures += 1
+            if transient_failures > max_transient_retries:
+                return {
+                    "score": None,
+                    "error": f"cli_error rc={proc.returncode}: {err_text}",
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                }
+            wait = min(2 ** transient_failures, 60)
+            print(f"    [retry] cli exit {proc.returncode} ({model}) "
+                  f"[{transient_failures}/{max_transient_retries}]: "
+                  f"{err_text} -- waiting {wait}s...", flush=True)
             await asyncio.sleep(wait)
             continue
 
         try:
             data = json.loads(stdout.decode())
         except json.JSONDecodeError:
-            print(f"    [retry] json parse error ({model}), waiting {wait}s...",
-                  flush=True)
+            transient_failures += 1
+            if transient_failures > max_transient_retries:
+                return {
+                    "score": None,
+                    "error": "json_parse_error (max retries)",
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                }
+            wait = min(2 ** transient_failures, 60)
+            print(f"    [retry] json parse error ({model}) "
+                  f"[{transient_failures}/{max_transient_retries}], "
+                  f"waiting {wait}s...", flush=True)
             await asyncio.sleep(wait)
             continue
 
@@ -118,8 +264,34 @@ async def call_claude_cli(
             if "Not logged in" in error_msg:
                 print(f"FATAL: {error_msg}", file=sys.stderr, flush=True)
                 sys.exit(1)
-            print(f"    [retry] cli error: {error_msg} ({model}), "
-                  f"waiting {wait}s...", flush=True)
+            # Policy refusals are permanent — give up immediately, no retry.
+            if _looks_like_policy_refusal(error_msg):
+                return {
+                    "score": None,
+                    "error": "policy_refusal",
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                }
+            if _looks_like_rate_limit(error_msg):
+                rate_limit_attempts += 1
+                wait = min(2 ** min(rate_limit_attempts, 6), 60)
+                print(f"    [rate-limit] cli is_error ({model}): {error_msg} "
+                      f"-- waiting {wait}s (attempt {rate_limit_attempts})...",
+                      flush=True)
+                await asyncio.sleep(wait)
+                continue
+            transient_failures += 1
+            if transient_failures > max_transient_retries:
+                return {
+                    "score": None,
+                    "error": f"cli_error: {error_msg}",
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                }
+            wait = min(2 ** transient_failures, 60)
+            print(f"    [retry] cli error ({model}) "
+                  f"[{transient_failures}/{max_transient_retries}]: "
+                  f"{error_msg} -- waiting {wait}s...", flush=True)
             await asyncio.sleep(wait)
             continue
 
@@ -319,9 +491,12 @@ async def main():
         criteria = TASK_CRITERIA[subset] if use_criteria else None
 
         while valid_per_subset[subset] < target and qi < len(queue):
-            # Build batch of uncompleted examples
+            # Build batch of uncompleted examples. Keep the batch small so
+            # each example's calls don't get scattered across thousands of
+            # queued tasks waiting on the concurrency semaphore — that makes
+            # the first example land MUCH later than necessary.
             batch = []
-            batch_size = min(20, target - valid_per_subset[subset])
+            batch_size = min(3, target - valid_per_subset[subset])
             while len(batch) < batch_size and qi < len(queue):
                 ex = queue[qi]; qi += 1
                 if ex["id"] not in completed:
@@ -329,25 +504,40 @@ async def main():
             if not batch:
                 break
 
-            # Score batch
+            # Score batch — write each example as it completes (not after the
+            # whole batch) so a crash mid-batch doesn't lose finished work.
             tasks = [
-                score_example(ex, args.k, sem, args.prompt, criteria)
+                asyncio.create_task(
+                    score_example(ex, args.k, sem, args.prompt, criteria)
+                )
                 for ex in batch
             ]
 
             print(f"  {subset}: scoring batch of {len(batch)} "
-                  f"({valid_per_subset[subset]}/{target} done)")
-            results = await asyncio.gather(*tasks)
+                  f"({valid_per_subset[subset]}/{target} done)", flush=True)
 
-            for r in results:
+            for fut in asyncio.as_completed(tasks):
+                r = await fut
                 if not r["refused"]:
                     outf.write(json.dumps(r) + "\n")
                     outf.flush()
                     n_valid += 1
                     valid_per_subset[subset] += 1
+                    print(f"    [done] {r['id']} ({subset}) "
+                          f"[{valid_per_subset[subset]}/{target}]", flush=True)
                 else:
                     n_refused += 1
-                    print(f"  Refused {r['id']} in {subset}")
+                    # Summarise why it was refused so we can track refusal
+                    # reasons (e.g., policy_refusal vs other transient errors)
+                    err_counts: dict[str, int] = defaultdict(int)
+                    for mk in MODEL_MAP:
+                        for resp_errs in r[f"{mk}_errors"]:
+                            for e in resp_errs:
+                                if e:
+                                    err_counts[e] += 1
+                    summary = ", ".join(f"{e}×{c}" for e, c in err_counts.items())
+                    print(f"  Refused {r['id']} in {subset}: {summary}",
+                          flush=True)
 
         if valid_per_subset[subset] < target:
             print(f"  WARNING: {valid_per_subset[subset]}/{target} for {subset}")
