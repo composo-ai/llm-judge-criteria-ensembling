@@ -1329,6 +1329,36 @@ def main():
                   f"[{m['accuracy_ci']['overall']['ci_low']:.3f}, "
                   f"{m['accuracy_ci']['overall']['ci_high']:.3f}]")
 
+    # Cross-model paired bootstrap: criteria+ensemble vs baseline on Claude
+    if claude_base and claude_criteria:
+        cpb = {}
+        for model_label, model_key in [("sonnet", "full"), ("haiku", "mini")]:
+            cpb[f"claude_{model_label}_criteria_k8_vs_baseline_k1"] = paired_bootstrap(
+                claude_criteria[1], claude_base[1], model_key, model_key, k_a=8, k_b=1)
+            cpb[f"claude_{model_label}_criteria_k8_vs_ensemble_k8"] = paired_bootstrap(
+                claude_criteria[1], claude_base[1], model_key, model_key, k_a=8, k_b=8)
+        all_metrics["paired_bootstrap_claude"] = cpb
+        print("\n  Claude paired bootstrap (intersection, n=2000):")
+        for name, r in cpb.items():
+            if r.get("n"):
+                print(f"    {name}: Δ={r['mean_delta']*100:+.2f}pp "
+                      f"[{r['ci_low']*100:+.2f}, {r['ci_high']*100:+.2f}] "
+                      f"p(a>b)={r['p_a_gt_b']:.3f} n={r['n']}")
+
+        # Tie rates for Claude (supports stochastic-scorer claim cross-model)
+        ctie = {}
+        for model_label, model_key in [("sonnet", "full"), ("haiku", "mini")]:
+            ctie.update(tie_rate_by_condition([
+                (f"claude_{model_label}_baseline_k1", claude_base[1], model_key, 1),
+                (f"claude_{model_label}_baseline_k8", claude_base[1], model_key, 8),
+                (f"claude_{model_label}_criteria_k1", claude_criteria[1], model_key, 1),
+                (f"claude_{model_label}_criteria_k8", claude_criteria[1], model_key, 8),
+            ]))
+        all_metrics["tie_rate_claude"] = ctie
+        print("\n  Claude tie rates:")
+        for name, t in ctie.items():
+            print(f"    {name}: {t['n_tied']}/{t['n']} = {t['tie_rate']:.3f}")
+
     # --- Save ---
     output = TABLES_DIR / "all_metrics.json"
     with open(output, "w") as f:

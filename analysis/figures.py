@@ -604,6 +604,138 @@ def plot_temperature_sweep(metrics):
 
 
 # ===================================================================
+# Figure 11: Cross-model generalisation
+# ===================================================================
+
+def plot_cross_model_gain(metrics):
+    """Bar chart: criteria + ensembling deltas across model families.
+
+    Computes accuracies directly from raw collections so it works
+    independently of the (slow) full metrics regeneration.
+    """
+    from analysis.compute_metrics import load_collection, compute_accuracy
+
+    def _acc(path, model, k):
+        try:
+            return compute_accuracy(load_collection(path), model=model, k_subset=k)["overall"]
+        except FileNotFoundError:
+            return None
+
+    spec = [
+        ("GPT-5.4",
+         ("results/raw/base_both_k8.jsonl",     "full", 1),
+         ("results/raw/base_both_k8.jsonl",     "full", 8),
+         ("results/raw/criteria_both_k8.jsonl", "full", 8)),
+        ("GPT-5.4 mini",
+         ("results/raw/base_both_k8.jsonl",     "mini", 1),
+         ("results/raw/base_both_k8.jsonl",     "mini", 8),
+         ("results/raw/criteria_both_k8.jsonl", "mini", 8)),
+        ("Claude Sonnet 4.6",
+         ("results/raw/base_claude_both_k8.jsonl",     "full", 1),
+         ("results/raw/base_claude_both_k8.jsonl",     "full", 8),
+         ("results/raw/criteria_claude_both_k8.jsonl", "full", 8)),
+        ("Claude Haiku 4.5",
+         ("results/raw/base_claude_both_k8.jsonl",     "mini", 1),
+         ("results/raw/base_claude_both_k8.jsonl",     "mini", 8),
+         ("results/raw/criteria_claude_both_k8.jsonl", "mini", 8)),
+    ]
+
+    rows = []
+    for label, base_spec, ens_spec, both_spec in spec:
+        b = _acc(*base_spec)
+        e = _acc(*ens_spec)
+        c = _acc(*both_spec)
+        if b is None or e is None or c is None:
+            print(f"  cross_model_gain: skipping {label} (missing data)")
+            continue
+        rows.append((label, b, e, c))
+
+    if len(rows) < 2:
+        print("  Skipping cross-model figure: insufficient data")
+        return
+
+    fig, ax = plt.subplots(figsize=(7, 4))
+    n_groups = len(rows)
+    x = np.arange(n_groups)
+    bar_w = 0.26
+
+    # Use distinct colorblind-safe colors for the three conditions
+    cols = {"base": "#0173b2", "ens": "#de8f05", "both": "#d55e00"}
+
+    base_vals = [r[1] for r in rows]
+    ens_vals  = [r[2] for r in rows]
+    both_vals = [r[3] for r in rows]
+
+    ax.bar(x - bar_w, base_vals, bar_w, label="Baseline ($k{=}1$)",          color=cols["base"])
+    ax.bar(x,         ens_vals,  bar_w, label="Ensemble ($k{=}8$)",          color=cols["ens"])
+    ax.bar(x + bar_w, both_vals, bar_w, label="Criteria + ensemble ($k{=}8$)", color=cols["both"])
+
+    # Annotate the delta (criteria+ensemble vs baseline) on top of the right-most bar
+    for i, (_, b, _, c) in enumerate(rows):
+        delta_pp = (c - b) * 100
+        ax.annotate(f"+{delta_pp:.1f}pp",
+                    xy=(i + bar_w, c), xytext=(0, 3),
+                    textcoords="offset points",
+                    ha="center", va="bottom", fontsize=9, fontweight="bold")
+
+    ax.set_xticks(x)
+    ax.set_xticklabels([r[0] for r in rows], fontsize=10)
+    ax.set_ylabel("Accuracy")
+    ax.set_ylim(0.55, 1.0)
+    ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f"{y:.0%}"))
+    ax.set_title("Cross-model accuracy: criteria + ensembling")
+    ax.legend(loc="lower right", fontsize=9, framealpha=0.95)
+    _save(fig, "cross_model_gain")
+
+
+# ===================================================================
+# Figure 12: Cross-model diminishing returns
+# ===================================================================
+
+def plot_cross_model_diminishing(metrics):
+    """k=1..8 accuracy curves for the five-model cross-family panel."""
+    from analysis.compute_metrics import load_collection, compute_accuracy
+
+    def _curve(path, model):
+        try:
+            data = load_collection(path)
+        except FileNotFoundError:
+            return None
+        return [compute_accuracy(data, model=model, k_subset=k)["overall"] for k in range(1, 9)]
+
+    spec = [
+        ("GPT-5.4",          "results/raw/base_both_k8.jsonl",        "full", "#0173b2", "-"),
+        ("GPT-5.4 mini",     "results/raw/base_both_k8.jsonl",        "mini", "#de8f05", "-"),
+        ("GPT-5.4 nano",     "results/raw/base_nano_k8.jsonl",        "nano", "#ca9161", "-"),
+        ("Claude Sonnet 4.6", "results/raw/base_claude_both_k8.jsonl", "full", "#d55e00", "--"),
+        ("Claude Haiku 4.5", "results/raw/base_claude_both_k8.jsonl", "mini", "#cc78bc", "--"),
+    ]
+
+    fig, ax = plt.subplots(figsize=(6, 4))
+    plotted = 0
+    for label, path, model, color, style in spec:
+        accs = _curve(path, model)
+        if accs is None:
+            print(f"  cross_model_diminishing: skipping {label}")
+            continue
+        ax.plot(range(1, 9), accs, marker="o", color=color, linestyle=style, label=label, lw=1.5)
+        plotted += 1
+
+    if plotted < 2:
+        print("  Skipping cross-model diminishing: insufficient data")
+        return
+
+    ax.set_xlabel("Ensemble size $k$")
+    ax.set_ylabel("Accuracy")
+    ax.set_title("Diminishing returns across model families")
+    ax.set_xticks([1, 2, 3, 4, 5, 6, 7, 8])
+    ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f"{y:.0%}"))
+    ax.legend(loc="lower right", fontsize=9, framealpha=0.95)
+    ax.grid(alpha=0.3)
+    _save(fig, "cross_model_diminishing")
+
+
+# ===================================================================
 # Main
 # ===================================================================
 
@@ -642,6 +774,12 @@ def main():
 
     print("\n  10. Temperature Sweep")
     plot_temperature_sweep(metrics)
+
+    print("\n  11. Cross-model gain")
+    plot_cross_model_gain(metrics)
+
+    print("\n  12. Cross-model diminishing returns")
+    plot_cross_model_diminishing(metrics)
 
     print(f"\nDone! Figures saved to {FIGURES_DIR}/")
 

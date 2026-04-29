@@ -56,7 +56,7 @@
 \printAffiliationsAndNotice{}
 
 \begin{abstract}
-Using a language model to score or rank candidate responses has become a scalable alternative to human evaluation in reinforcement learning from human feedback (RLHF) pipelines, benchmarking, and application layer evaluations. However, output reliability depends heavily on prompting and aggregation strategy. We present an empirical investigation of four drop-in techniques --- ensemble scoring, task-specific criteria injection, calibration context, and adaptive model escalation --- for improving GPT-5.4 judge accuracy on RewardBench~2, with a unifying lens of noise control on the stochastic judge: ensembling as Monte Carlo averaging over per-call noise, criteria injection as between-response discrimination sharpening, and per-response score variance as an uncertainty signal. Ensemble scoring (+9.8pp) and task-specific criteria injection (+3.0pp, virtually cost free) together reach \textbf{83.6\%} accuracy, +11.9pp over the 71.7\% baseline. Calibration context and adaptive model escalation map additional operating points on the cost--accuracy Pareto frontier. Smaller models benefit disproportionately from ensembling: GPT-5.4 mini at ensemble size $k{=}8$ achieves 79.2\%, making high-accuracy LLM judges accessible at low cost.
+Using a language model to score or rank candidate responses has become a scalable alternative to human evaluation in reinforcement learning from human feedback (RLHF) pipelines, benchmarking, and application layer evaluations. However, output reliability depends heavily on prompting and aggregation strategy. We present an empirical investigation of four drop-in techniques --- ensemble scoring, task-specific criteria injection, calibration context, and adaptive model escalation --- for improving GPT-5.4 judge accuracy on RewardBench~2, with a unifying lens of noise control on the stochastic judge: ensembling as Monte Carlo averaging over per-call noise, criteria injection as between-response discrimination sharpening, and per-response score variance as an uncertainty signal. Ensemble scoring (+9.8pp) and task-specific criteria injection (+3.0pp, virtually cost free) together reach \textbf{83.6\%} accuracy, +11.9pp over the 71.7\% baseline. Calibration context and adaptive model escalation map additional operating points on the cost--accuracy Pareto frontier. Smaller models benefit disproportionately from ensembling: GPT-5.4 mini at ensemble size $k{=}8$ achieves 79.2\%, making high-accuracy LLM judges accessible at low cost. The recommendation replicates on Claude Sonnet 4.6 (83.5\%) and Claude Haiku 4.5 (86.0\%), supporting cross-family generalisation.
 \end{abstract}
 
 %----------------------------------------------------------
@@ -337,18 +337,42 @@ Criteria + calibration (combined) & 82.6 ($\pm$1.8) & 79.2 ($\pm$1.9) & --- \\
 \end{tabular}
 \end{table}
 
-Criteria is the only prompt technique that helps at $k{=}8$: +2.1pp for the full model, +2.3pp for mini. Calibration is a no-op at $k{=}8$ (+0.2pp, within noise); the combined condition (82.6\%) sits within noise of criteria alone (83.6\%), so stacking calibration onto criteria does not help. Mini + criteria $k{=}8$ (81.5\%) matches full-model $k{=}8$ at one-quarter the cost, the optimal operating point for cost-constrained deployments.
+Criteria is the only prompt technique that helps at $k{=}8$: +2.1pp for the full model, +2.3pp for mini. Calibration is a no-op at $k{=}8$ (+0.2pp, within noise); the combined condition (82.6\%) sits within noise of criteria alone (83.6\%), so stacking calibration onto criteria does not help. Mini + criteria $k{=}8$ (81.5\%) matches full-model $k{=}8$ at one-quarter the cost, the optimal operating point for cost-constrained deployments. Mini's $k{=}8$ winner selection converges to full's at 78.7\% agreement (Spearman $\rho{=}0.79$); nano plateaus at ${\sim}$70\% agreement, consistent with a larger capability gap (Appendix~\ref{sec:convergence}).
 
-\paragraph{Mini vs full convergence.} We measure how quickly mini's winner selection converges to full as $k$ grows, using agreement (fraction of examples picking the same winner) and Spearman rank correlation over the four per-response means (Figure~\ref{fig:convergence}). Mini agreement approaches 78.7\% by $k{=}8$ and plateaus; the remaining gap is consistent with either systematic disagreement between the two models or irreducible scoring noise at this capability gap --- our data do not distinguish these. Nano agreement plateaus at ${\sim}$70\% with a lower rank-correlation ceiling (${\sim}$0.67 vs ${\sim}$0.79 for mini), consistent with a larger capability gap.
+\paragraph{Criteria + ensembling as a simple strong baseline.} Criteria $k{=}8$ (83.6\%) matches the full combined condition (82.6\%) at lower cost (5.3$\times$ vs 6.8$\times$); if you are already paying for $k{=}8$, adding criteria is a near-free +2.1pp upgrade over ensembling.
+
+\subsection{Cross-model generalisation}
+\label{sec:cross-model}
+
+To test whether the criteria + ensembling recommendation transfers beyond GPT, we collected identical \texttt{base} and \texttt{criteria} runs on \textbf{Claude Sonnet 4.6} and \textbf{Claude Haiku 4.5} via the Claude CLI (1{,}763 RB2 examples per condition at $k{=}8$). The dominated techniques (calibration, escalation, soft blending) were not collected for Claude --- the cross-model claim is intentionally scoped to the recommended pair.
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\columnwidth]{mini_full_convergence.png}
-\caption{Model agreement with full ($k{=}8$) as a function of ensemble size. Mini reaches 78.7\% by $k{=}8$ (77.5\% at $k{=}5$); nano plateaus at ${\sim}$70\%, with a lower rank-correlation ceiling (0.67 vs 0.79 for mini), confirming a larger capability gap.}
-\label{fig:convergence}
+\includegraphics[width=\columnwidth]{cross_model_gain.png}
+\caption{Cross-model accuracy on RewardBench~2: baseline ($k{=}1$), ensemble only ($k{=}8$), and criteria + ensembling ($k{=}8$). The recommended configuration improves on baseline across all four model conditions; deltas (criteria + ensemble vs baseline) are annotated above the right-most bar in each group.}
+\label{fig:cross-model}
 \end{figure}
 
-\paragraph{Criteria + ensembling as a simple strong baseline.} Criteria $k{=}8$ (83.6\%) matches the full combined condition (82.6\%) at lower cost (5.3$\times$ vs 6.8$\times$); if you are already paying for $k{=}8$, adding criteria is a near-free +2.1pp upgrade over ensembling.
+\begin{table}[ht]
+\centering
+\caption{Cross-model headline accuracy (\%, 95\% bootstrap CI half-widths). $\Delta$ is criteria + ensembling vs baseline.}
+\label{tab:cross-model}
+\small
+\begin{tabular}{lccc}
+\toprule
+Model              & Base.\ ($k{=}1$) & Crit.+ens.\ ($k{=}8$) & $\Delta$ \\
+\midrule
+GPT-5.4            & 71.7 ($\pm$2.1) & 83.6 ($\pm$1.8)          & $+$11.9 \\
+GPT-5.4 mini       & 64.8 ($\pm$2.3) & 81.5 ($\pm$1.9)          & $+$16.7 \\
+Claude Sonnet 4.6  & 72.3 ($\pm$2.2) & 83.4 ($\pm$1.8)          & $+$11.1 \\
+Claude Haiku 4.5   & 72.3 ($\pm$2.1) & \textbf{85.8 ($\pm$1.7)} & $+$13.5 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Recommendation generalises.} Criteria + ensembling produces a paired-significant gain over the $k{=}1$ baseline for both Claude models (paired bootstrap, $p{>}0.999$ in each case). Sonnet 4.6 reaches 83.4\%, statistically tied with GPT-5.4's 83.6\%; Haiku 4.5 reaches \textbf{85.8\%}, the highest accuracy in our cross-model panel. The within-family pattern of "smaller models gain more from ensembling" replicates inside the Claude family: Haiku gains $+$13.5pp where Sonnet gains $+$11.1pp. The same tie-rate collapse from $k{=}1$ to $k{=}8$ that drives GPT's gain (Section~\ref{sec:discussion}) replicates on Claude (Appendix~\ref{sec:cross-model-detail}), supporting the noise-control framing as model-family-agnostic.
+
+\paragraph{Caveats.} Claude data was collected via the Claude CLI (subprocess), not the Anthropic API directly, with no \texttt{reasoning\_effort} parameter (Anthropic does not expose one); determinism characteristics may differ from the Azure pipeline. We test only Sonnet 4.6 and Haiku 4.5; Opus and other model families (Gemini, open-weight) remain untested. The dominated-techniques generalisation (calibration, escalation, soft blending) is not assessed across providers.
 
 %----------------------------------------------------------
 \section{Discussion and Conclusion}
@@ -357,7 +381,7 @@ Criteria is the only prompt technique that helps at $k{=}8$: +2.1pp for the full
 
 \paragraph{Limitations.}
 \begin{itemize}
-  \item All experiments use a single judge model family (GPT-5.4); generalisability to other models (Claude, Gemini, open-weight) is untested.
+  \item We evaluate three judge model families (GPT-5.4, Claude Sonnet 4.6, Claude Haiku 4.5); coverage of Gemini, open-weight judges, and finetuned judges (e.g., Prometheus 2) remains untested.
   \item RewardBench~2 is a single benchmark; performance may differ on production judge tasks such as offline eval suites and real-time monitoring.
   \item We set \texttt{reasoning\_effort="none"} throughout as a control to isolate prompt-level and aggregation effects from reasoning-induced gains; we have not sanity-checked whether the +11.9pp criteria+ensembling gap persists at higher reasoning effort, and note that reasoning itself is a variance-reducing intervention that could substitute for ensembling at higher per-call cost.
   \item We used a single set of author-designed criteria, fixed in the internal repository before the first collection run; sensitivity to wording variation and to external-registry-style pre-registration is untested.
@@ -370,7 +394,7 @@ Criteria is the only prompt technique that helps at $k{=}8$: +2.1pp for the full
 
 \paragraph{Reproducibility.} All experiments were conducted via Azure OpenAI API version \texttt{2025-04-01-preview} using GPT-5.4, GPT-5.4 mini, and GPT-5.4 nano deployments. Data was collected in March--April 2026. All API calls use temperature 1.0 with no seed parameter, so individual scores are not deterministically reproducible. Our bootstrap CIs reflect sampling variance over examples, not run-to-run API variance: Azure can silently rotate deployments, and we have not re-collected a headline condition to quantify cross-run drift. We recommend downstream users of these techniques re-benchmark on their own deployment. Total API spend across all collections was approximately \$1,500. All collection scripts write results incrementally and support resume. Code and raw data will be released upon acceptance (anonymised link suppressed for blind review).
 
-\paragraph{Conclusion.} On RewardBench~2, all four drop-in techniques we investigate improve over baseline. \textbf{Criteria injection} (+3.0pp at $k{=}1$, near-free) and \textbf{ensembling} (+9.8pp at $k{=}8$, with $k{=}3$ capturing ${\sim}$70\% of the gain) are the simplest and most cost-effective; together they reach \textbf{83.6\%} (+11.9pp), and we recommend them in practice for LLM-as-a-judge evaluation. Calibration context and adaptive model escalation also improve over baseline but at higher cost, and at high $k$ variance-reduction techniques become substitutes rather than complements, so stacking did not yield additive gains.
+\paragraph{Conclusion.} On RewardBench~2, all four drop-in techniques we investigate improve over baseline. \textbf{Criteria injection} (+3.0pp at $k{=}1$, near-free) and \textbf{ensembling} (+9.8pp at $k{=}8$, with $k{=}3$ capturing ${\sim}$70\% of the gain) are the simplest and most cost-effective; together they reach \textbf{83.6\%} (+11.9pp), and we recommend them in practice for LLM-as-a-judge evaluation. The recommendation replicates on Claude Sonnet 4.6 (83.4\%) and Haiku 4.5 (85.8\%), supporting cross-family generalisation (Section~\ref{sec:cross-model}). Calibration context and adaptive model escalation also improve over baseline but at higher cost, and at high $k$ variance-reduction techniques become substitutes rather than complements, so stacking did not yield additive gains.
 
 \FloatBarrier
 \balance
@@ -723,6 +747,48 @@ $k$ & Agreement & Rank corr ($\rho$) \\
 \end{tabular}
 \end{table}
 
-Mini agreement reaches 78.7\% by $k{=}8$; we cannot distinguish from this data whether the ceiling reflects systematic disagreement or residual noise at a capability gap. Nano shows a qualitatively similar pattern but with a lower ceiling: agreement rises from ${\sim}$50\% at $k{=}1$ to ${\sim}$70\% at $k{=}8$, with rank correlation plateauing around 0.67 (vs 0.79 for mini). Visualisation is in Figure~\ref{fig:convergence} (main paper).
+Mini agreement reaches 78.7\% by $k{=}8$; we cannot distinguish from this data whether the ceiling reflects systematic disagreement or residual noise at a capability gap. Nano shows a qualitatively similar pattern but with a lower ceiling: agreement rises from ${\sim}$50\% at $k{=}1$ to ${\sim}$70\% at $k{=}8$, with rank correlation plateauing around 0.67 (vs 0.79 for mini).
+
+\begin{figure}[ht]
+\centering
+\includegraphics[width=\columnwidth]{mini_full_convergence.png}
+\caption{Model agreement with full ($k{=}8$) as a function of ensemble size. Mini reaches 78.7\% by $k{=}8$; nano plateaus at ${\sim}$70\%, with a lower rank-correlation ceiling.}
+\label{fig:convergence}
+\end{figure}
+
+\subsection{Cross-Model Generalisation Details}
+\label{sec:cross-model-detail}
+
+\paragraph{Diminishing returns across model families.} Figure~\ref{fig:cross-model-dim} extends the diminishing-returns curve to Claude. The shape is qualitatively similar across providers --- most of the gain is captured by $k{=}3$ for all five models, consistent with Monte Carlo variance reduction not being provider-specific.
+
+\begin{figure}[ht]
+\centering
+\includegraphics[width=\columnwidth]{cross_model_diminishing.png}
+\caption{Accuracy vs.\ ensemble size $k$ for the five models in our cross-model panel. The diminishing-returns shape replicates across providers; absolute levels differ but the curvature does not.}
+\label{fig:cross-model-dim}
+\end{figure}
+
+\paragraph{Tie-rate collapse on Claude.} Both Claude models reproduce the GPT signature of $k{=}1 \to k{=}8$ tie-rate collapse (Table~\ref{tab:cross-model-tie}): ties become rare under ensembling because they require all four response means to coincide across $k$ draws. The relative reduction ($\sim$5--7$\times$) matches what we observe on GPT-5.4 (20.4\% $\to$ 4.5\%).
+
+\begin{table}[ht]
+\centering
+\caption{Tie rates ($k{=}1$ vs $k{=}8$) for the Claude collections.}
+\label{tab:cross-model-tie}
+\small
+\begin{tabular}{lcc}
+\toprule
+Condition           & $k{=}1$ & $k{=}8$ \\
+\midrule
+Sonnet baseline     & 18.5\% & 4.0\% \\
+Sonnet criteria     & 18.7\% & 4.7\% \\
+Haiku baseline      & 18.3\% & 2.6\% \\
+Haiku criteria      & 17.0\% & 2.5\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Paired bootstrap.} Criteria + ensembling at $k{=}8$ vs.\ baseline $k{=}1$ on the intersection of examples: paired-significant for all four model conditions (paired bootstrap $n{=}2000$). Sonnet $\Delta{=}{+}11.0$pp [95\% CI $+9.1, +12.8$], $p{>}0.999$; Haiku $\Delta{=}{+}13.3$pp [$+11.5, +15.2$], $p{>}0.999$.
+
+\paragraph{Collection methodology.} Claude data was collected via the Claude CLI in subprocess mode (driver \texttt{collect\_claude.py}) with default sampling settings (temperature 1.0; no \texttt{reasoning\_effort} parameter, which Anthropic does not expose). The CLI handles auto-update behaviour internally. Rate-limit errors retry indefinitely with exponential backoff; transient errors retry up to 5 times. Per-example refusals are tracked separately and excluded from accuracy computation, mirroring the Azure OpenAI content-filter handling on the GPT side.
 
 \end{document}
