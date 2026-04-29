@@ -55,7 +55,6 @@ CLAUDE_ENV = {
     **os.environ,
     "DISABLE_AUTOUPDATER": "1",
     "CLAUDE_CODE_DISABLE_AUTO_UPDATE": "1",
-    "CLAUDE_CONFIG_DIR": os.path.expanduser("~/.claude-bigdaddy"),
 }
 
 
@@ -63,12 +62,15 @@ CLAUDE_ENV = {
 # Resume helpers (same as collect.py)
 # ---------------------------------------------------------------------------
 
-def load_completed_ids(path: Path) -> set[str]:
+def load_completed_ids(path: Path) -> set[tuple[str, str]]:
+    # Keyed by (subset, id) because RB2 ids are not globally unique:
+    # the same id appears once in Factuality and once in another subset.
     ids = set()
     if path.exists():
         with open(path) as f:
             for line in f:
-                ids.add(json.loads(line)["id"])
+                r = json.loads(line)
+                ids.add((r["subset"], r["id"]))
     return ids
 
 
@@ -499,7 +501,7 @@ async def main():
             batch_size = min(3, target - valid_per_subset[subset])
             while len(batch) < batch_size and qi < len(queue):
                 ex = queue[qi]; qi += 1
-                if ex["id"] not in completed:
+                if (ex["subset"], ex["id"]) not in completed:
                     batch.append(ex)
             if not batch:
                 break

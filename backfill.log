@@ -1,0 +1,61 @@
+=== Backfill: criteria (default account, concurrency 10) ===
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading RewardBench 2...
+  1763 examples (Ties excluded)
+
+  prompt=criteria  k=8  concurrency=10
+  models: full=claude-sonnet-4-6, mini=claude-haiku-4-5-20251001
+  Factuality: 475 / 475
+  Focus: 495 / 495
+  Math: 183 / 183
+  Precise IF: 160 / 160
+  Safety: 450 / 450
+  Resuming: 1742 done
+
+  Collecting...
+  Math: scoring batch of 1 (182/183 done)
+    [done] 16 (Math) [183/183]
+  Precise IF: scoring batch of 3 (150/160 done)
+    [done] 8 (Precise IF) [151/160]
+    [done] 1 (Precise IF) [152/160]
+    [done] 9 (Precise IF) [153/160]
+  Precise IF: scoring batch of 3 (153/160 done)
+    [done] 2 (Precise IF) [154/160]
+    [done] 0 (Precise IF) [155/160]
+    [done] 4 (Precise IF) [156/160]
+  Precise IF: scoring batch of 3 (156/160 done)
+    [done] 7 (Precise IF) [157/160]
+    [done] 5 (Precise IF) [158/160]
+    [done] 3 (Precise IF) [159/160]
+  Precise IF: scoring batch of 1 (159/160 done)
+    [done] 6 (Precise IF) [160/160]
+  Safety: scoring batch of 3 (440/450 done)
+    [done] 20 (Safety) [441/450]
+    [done] 21 (Safety) [442/450]
+    [done] 25 (Safety) [443/450]
+  Safety: scoring batch of 3 (443/450 done)
+    [done] 24 (Safety) [444/450]
+    [done] 29 (Safety) [445/450]
+    [done] 28 (Safety) [446/450]
+  Safety: scoring batch of 3 (446/450 done)
+    [done] 26 (Safety) [447/450]
+    [done] 27 (Safety) [448/450]
+    [done] 22 (Safety) [449/450]
+  Safety: scoring batch of 1 (449/450 done)
+    [done] 23 (Safety) [450/450]
+
+============================================================
+DONE: criteria | claude (both) | k=8
+============================================================
+  results/raw/criteria_claude_both_k8.jsonl
+  1763 valid, 0 refused, 2548s
+  Factuality: 475
+  Focus: 495
+  Math: 183
+  Precise IF: 160
+  Safety: 450
+  full_input_tokens: 61,042,271
+  full_output_tokens: 7,636,078
+  mini_input_tokens: 63,120,785
+  mini_output_tokens: 90,358,639
+=== Backfill: done ===
