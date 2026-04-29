@@ -1,15 +1,6 @@
-MAIN = main
 WORKSHOP = workshop
 
-all: $(MAIN).pdf
-
-$(MAIN).pdf: $(MAIN).tex references.bib
-	pdflatex $(MAIN)
-	bibtex $(MAIN)
-	pdflatex $(MAIN)
-	pdflatex $(MAIN)
-
-workshop: $(WORKSHOP).pdf
+all: $(WORKSHOP).pdf
 
 $(WORKSHOP).pdf: $(WORKSHOP).tex references.bib
 	pdflatex $(WORKSHOP)
@@ -17,10 +8,12 @@ $(WORKSHOP).pdf: $(WORKSHOP).tex references.bib
 	pdflatex $(WORKSHOP)
 	pdflatex $(WORKSHOP)
 
+workshop: $(WORKSHOP).pdf
+
 clean:
 	rm -f *.aux *.bbl *.blg *.log *.out *.toc *.fls *.fdb_latexmk *.synctex.gz
 
 distclean: clean
-	rm -f $(MAIN).pdf $(WORKSHOP).pdf
+	rm -f $(WORKSHOP).pdf
 
 .PHONY: all workshop clean distclean
