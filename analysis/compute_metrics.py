@@ -1267,6 +1267,98 @@ def main():
         for name, t in tr.items():
             print(f"    {name}: {t['n_tied']}/{t['n']} = {t['tie_rate']:.3f}")
 
+    # === 8. Claude generalisability experiments ===
+    claude_base = _find("base_claude_both")
+    claude_criteria = _find("criteria_claude_both")
+
+    if claude_base or claude_criteria:
+        print(f"\n{'='*60}")
+        print("CLAUDE CONDITIONS")
+        print(f"{'='*60}")
+
+    def _claude_condition_metrics(name, data, model="full", k=None):
+        """Like _condition_metrics but with $0 cost (Pro Max subscription)."""
+        acc = compute_accuracy(data, model=model, k_subset=k)
+        ci = bootstrap_accuracy_ci(data, model=model, k_subset=k)
+        return {
+            "name": name, "n": acc["n"],
+            "accuracy": acc, "accuracy_ci": ci,
+            "cost": {"cost_per_example": 0.0},
+        }
+
+    if claude_base:
+        key, data = claude_base
+        for model_label, model_key in [("Sonnet 4.6", "full"), ("Haiku 4.5", "mini")]:
+            m = _claude_condition_metrics(
+                f"Claude {model_label} Baseline k=1", data, model_key, k=1)
+            all_metrics[f"claude_{model_key}_baseline"] = m
+            print(f"\n  Claude {model_label} Baseline k=1: {m['accuracy']['overall']:.3f} "
+                  f"[{m['accuracy_ci']['overall']['ci_low']:.3f}, "
+                  f"{m['accuracy_ci']['overall']['ci_high']:.3f}]  n={m['n']}")
+
+            m = _claude_condition_metrics(
+                f"Claude {model_label} Ensemble k=8", data, model_key, k=8)
+            all_metrics[f"claude_{model_key}_ensemble_k8"] = m
+            print(f"  Claude {model_label} Ensemble k=8: {m['accuracy']['overall']:.3f} "
+                  f"[{m['accuracy_ci']['overall']['ci_low']:.3f}, "
+                  f"{m['accuracy_ci']['overall']['ci_high']:.3f}]")
+
+            # Diminishing returns
+            dim = {}
+            for k_sub in range(1, 9):
+                a = compute_accuracy(data, model=model_key, k_subset=k_sub)
+                dim[k_sub] = a["overall"]
+            all_metrics[f"claude_diminishing_returns_{model_key}"] = dim
+            print(f"  Claude {model_label} diminishing returns: "
+                  f"{' '.join(f'k={k}:{v:.3f}' for k, v in dim.items())}")
+
+    if claude_criteria:
+        key, data = claude_criteria
+        for model_label, model_key in [("Sonnet 4.6", "full"), ("Haiku 4.5", "mini")]:
+            m = _claude_condition_metrics(
+                f"Claude {model_label} Criteria k=1", data, model_key, k=1)
+            all_metrics[f"claude_{model_key}_criteria"] = m
+            print(f"\n  Claude {model_label} Criteria k=1: {m['accuracy']['overall']:.3f} "
+                  f"[{m['accuracy_ci']['overall']['ci_low']:.3f}, "
+                  f"{m['accuracy_ci']['overall']['ci_high']:.3f}]  n={m['n']}")
+
+            m = _claude_condition_metrics(
+                f"Claude {model_label} Criteria k=8", data, model_key, k=8)
+            all_metrics[f"claude_{model_key}_criteria_k8"] = m
+            print(f"  Claude {model_label} Criteria k=8: {m['accuracy']['overall']:.3f} "
+                  f"[{m['accuracy_ci']['overall']['ci_low']:.3f}, "
+                  f"{m['accuracy_ci']['overall']['ci_high']:.3f}]")
+
+    # Cross-model paired bootstrap: criteria+ensemble vs baseline on Claude
+    if claude_base and claude_criteria:
+        cpb = {}
+        for model_label, model_key in [("sonnet", "full"), ("haiku", "mini")]:
+            cpb[f"claude_{model_label}_criteria_k8_vs_baseline_k1"] = paired_bootstrap(
+                claude_criteria[1], claude_base[1], model_key, model_key, k_a=8, k_b=1)
+            cpb[f"claude_{model_label}_criteria_k8_vs_ensemble_k8"] = paired_bootstrap(
+                claude_criteria[1], claude_base[1], model_key, model_key, k_a=8, k_b=8)
+        all_metrics["paired_bootstrap_claude"] = cpb
+        print("\n  Claude paired bootstrap (intersection, n=2000):")
+        for name, r in cpb.items():
+            if r.get("n"):
+                print(f"    {name}: Δ={r['mean_delta']*100:+.2f}pp "
+                      f"[{r['ci_low']*100:+.2f}, {r['ci_high']*100:+.2f}] "
+                      f"p(a>b)={r['p_a_gt_b']:.3f} n={r['n']}")
+
+        # Tie rates for Claude (supports stochastic-scorer claim cross-model)
+        ctie = {}
+        for model_label, model_key in [("sonnet", "full"), ("haiku", "mini")]:
+            ctie.update(tie_rate_by_condition([
+                (f"claude_{model_label}_baseline_k1", claude_base[1], model_key, 1),
+                (f"claude_{model_label}_baseline_k8", claude_base[1], model_key, 8),
+                (f"claude_{model_label}_criteria_k1", claude_criteria[1], model_key, 1),
+                (f"claude_{model_label}_criteria_k8", claude_criteria[1], model_key, 8),
+            ]))
+        all_metrics["tie_rate_claude"] = ctie
+        print("\n  Claude tie rates:")
+        for name, t in ctie.items():
+            print(f"    {name}: {t['n_tied']}/{t['n']} = {t['tie_rate']:.3f}")
+
     # --- Save ---
     output = TABLES_DIR / "all_metrics.json"
     with open(output, "w") as f:

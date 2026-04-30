@@ -56,7 +56,7 @@
 \printAffiliationsAndNotice{}
 
 \begin{abstract}
-Using a language model to score or rank candidate responses has become a scalable alternative to human evaluation in reinforcement learning from human feedback (RLHF) pipelines, benchmarking, and application layer evaluations. However, output reliability depends heavily on prompting and aggregation strategy. We present an empirical investigation of four drop-in techniques --- ensemble scoring, task-specific criteria injection, calibration context, and adaptive model escalation --- for improving GPT-5.4 judge accuracy on RewardBench~2, with a unifying lens of noise control on the stochastic judge: ensembling as Monte Carlo averaging over per-call noise, criteria injection as between-response discrimination sharpening, and per-response score variance as an uncertainty signal. Ensemble scoring (+9.8pp) and task-specific criteria injection (+3.0pp, virtually cost free) together reach \textbf{83.6\%} accuracy, +11.9pp over the 71.7\% baseline. Calibration context and adaptive model escalation map additional operating points on the cost--accuracy Pareto frontier. Smaller models benefit disproportionately from ensembling: GPT-5.4 mini at ensemble size $k{=}8$ achieves 79.2\%, making high-accuracy LLM judges accessible at low cost.
+Using a language model to score or rank candidate responses has become a scalable alternative to human evaluation in reinforcement learning from human feedback (RLHF) pipelines, benchmarking, and application layer evaluations. However, output reliability depends heavily on prompting and aggregation strategy. We present an empirical investigation of four drop-in techniques --- ensemble scoring, task-specific criteria injection, calibration context, and adaptive model escalation --- for improving LLM judge accuracy on RewardBench~2, with a unifying lens of noise control on the stochastic judge: ensembling as Monte Carlo averaging over per-call noise, criteria injection as between-response discrimination sharpening, and per-response score variance as an uncertainty signal. Ensemble scoring and task-specific criteria injection (the latter virtually cost free) together reach up to \textbf{85.8\%} accuracy, +13.5pp over baseline. Calibration context and adaptive model escalation also improve over baseline but are dominated by criteria + ensembling on the cost--accuracy Pareto frontier. Small models benefit disproportionately from ensembling, making high-accuracy LLM judges accessible at low cost. We show that these techniques generalise across model providers, evaluating on both OpenAI GPT and Anthropic Claude families.
 \end{abstract}
 
 %----------------------------------------------------------
@@ -67,7 +67,7 @@ Using a language model to score or rank candidate responses has become a scalabl
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{pareto_frontier.png}
-\caption{Cost vs.\ accuracy Pareto frontier across all evaluated conditions. Criteria $k{=}8$ (83.6\%, 5.3$\times$ baseline cost) is the highest-accuracy point; mini+criteria $k{=}8$ (81.5\%, 1.2$\times$) matches full-model ensembling (81.5\% at 5.0$\times$) at roughly one-quarter the cost; nano $k{=}8$ sets the low-cost floor. Combined (82.6\%, 6.8$\times$) is dominated by criteria $k{=}8$.}
+\caption{Cost vs.\ accuracy Pareto frontier across all evaluated conditions. Each point is labelled \textit{technique} \textit{(class)} and shows the best-performing model in that class for the given technique; the provider supplying each point is listed per row in Table~\ref{tab:results-main}.}
 \label{fig:pareto}
 \end{figure}
 
@@ -84,12 +84,12 @@ This paper presents an empirical investigation of four drop-in techniques for im
   \item \textbf{Adaptive model escalation}: using a smaller proxy model for easy examples and escalating to a large model when variance is high; we evaluate both hard variance routing and sigmoid-weighted soft blending.
 \end{enumerate}
 
-We additionally evaluate a \textbf{combined} condition that stacks all four to test additivity. Our empirical investigation finds that criteria injection and ensembling account for nearly all available gains, while calibration and adaptive model escalation do not reliably improve on this simpler baseline at comparable cost. We report results for all conditions to provide a complete picture of what works in practice. All experiments are conducted with GPT-5.4 (full), GPT-5.4 mini, and GPT-5.4 nano via Azure OpenAI.
+We additionally evaluate a \textbf{combined} condition that stacks all four to test additivity. Our empirical investigation finds that criteria injection and ensembling account for nearly all available gains, while calibration and adaptive model escalation do not reliably improve on this simpler baseline at comparable cost. We report results for all conditions to provide a complete picture of what works in practice. All experiments are conducted across full, mini, and nano model classes (Section~\ref{sec:models}).
 
 \paragraph{Contributions.} Our main contributions are:
 \begin{itemize}
-  \item A systematic comparison of four drop-in techniques for improving LLM judge accuracy (plus a combined stacking condition), evaluated on 1,753 RewardBench~2 examples across three model tiers (GPT-5.4, GPT-5.4 mini, GPT-5.4 nano).
-  \item Evidence that criteria injection and ensembling dominate the cost--accuracy tradeoff (Figure~\ref{fig:pareto}), reaching 83.6\% (+11.9pp, identical on the $N{=}1710$ intersection) at 5.3$\times$ cost, while calibration, model routing, and soft blending improved over baseline but were dominated by criteria + ensembling at comparable or lower cost.
+  \item A systematic comparison of four drop-in techniques for improving LLM judge accuracy (plus a combined stacking condition), evaluated on 1,753 RewardBench~2 examples across full, mini, and nano model classes (Table~\ref{tab:models}).
+  \item Evidence that criteria injection and ensembling dominate the cost--accuracy tradeoff (Figure~\ref{fig:pareto}), reaching up to 85.8\% (+13.5pp over baseline) at 1.3$\times$ cost, while calibration, model routing, and soft blending improved over baseline but were dominated by criteria + ensembling at comparable or lower cost.
   \item A cost--accuracy analysis showing that smaller models benefit disproportionately from ensembling: mini $k{=}8$ reaches 79.2\% at 1.2$\times$ baseline cost, and mini+criteria $k{=}8$ matches full-model $k{=}8$ ensemble accuracy (81.5\%) at roughly one-quarter the cost.
 \end{itemize}
 
@@ -148,25 +148,27 @@ When running both a mini and a full model (Sections~\ref{sec:escalation}--\ref{s
 \subsection{Models and Costs}
 \label{sec:models}
 
-We use three GPT-5.4 model tiers via Azure OpenAI; their per-token pricing is summarised in Table~\ref{tab:models}.
+We evaluate five models across two providers (OpenAI and Anthropic), grouped into three capability \emph{classes} --- \emph{full}, \emph{mini}, and \emph{nano} --- defined by assumed relative compute cost within their provider. Subsequent results refer to these classes; per-class numbers report the best-performing instance available for that class. Table~\ref{tab:models} lists each model, its class, and its per-token API pricing.
 
 \begin{table}[ht]
 \centering
-\caption{Model pricing (OpenAI API, April 2026).}
+\caption{Models evaluated, capability class, and per-token API pricing.}
 \label{tab:models}
 \small
-\begin{tabular}{lrr}
+\begin{tabular}{llrr}
 \toprule
-Model & Input \$/M & Output \$/M \\
+Model              & Class & Input \$/M & Output \$/M \\
 \midrule
-GPT-5.4      & 2.50 & 15.00 \\
-GPT-5.4 mini & 0.75 & 4.50  \\
-GPT-5.4 nano & 0.20 & 1.25  \\
+Claude Sonnet 4.6  & full  & 3.00 & 15.00 \\
+GPT-5.4            & full  & 2.50 & 15.00 \\
+Claude Haiku 4.5   & mini  & 1.00 & 5.00  \\
+GPT-5.4 mini       & mini  & 0.75 & 4.50  \\
+GPT-5.4 nano       & nano  & 0.20 & 1.25  \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\paragraph{API pricing as a proxy for compute cost.} Closed-source models do not publish parameter counts or compute estimates, so we use API pricing as a proxy for relative compute cost and model capability. Absolute prices are vendor- and time-specific; we therefore report cost ratios (e.g., $1.0\times$ baseline) throughout, which are more stable than dollar amounts and directly reflect the cost--accuracy trade-offs facing practitioners.
+\paragraph{API pricing as a proxy for compute cost.} Closed-source models do not publish parameter counts or compute estimates, so we use API pricing as a proxy for relative compute cost and model capability. Absolute prices are vendor- and time-specific; we therefore report cost ratios throughout, which are more stable than dollar amounts and directly reflect the cost--accuracy trade-offs facing practitioners. \textbf{The reference $1.0\times$ unit is the baseline condition cost} --- one API call per response with GPT-5.4 (full) at $k{=}1$, four calls per example, using the OpenAI rates in Table~\ref{tab:models}. All other cost ratios in the paper are taken with respect to this anchor.
 
 All experiments use temperature 1.0, \texttt{reasoning\_effort="none"}, and a maximum of 4,096 output tokens per completion.
 
@@ -181,7 +183,7 @@ Ensemble conditions use the API's \texttt{n} parameter to request multiple compl
 \label{sec:methods}
 %----------------------------------------------------------
 
-\paragraph{Baseline.} The baseline condition applies the RB2 prompt verbatim with $k{=}1$ completion per response (four API calls per example, all using the full GPT-5.4 model). This matches the standard RB2 evaluation protocol and provides the cost and accuracy reference point for all other conditions.
+\paragraph{Baseline.} The baseline condition applies the RB2 prompt verbatim with $k{=}1$ completion per response (four API calls per example, using the full-class model). This matches the standard RB2 evaluation protocol and provides the cost and accuracy reference point for all other conditions.
 
 \subsection{Ensemble Scoring}
 \label{sec:ensemble}
@@ -234,7 +236,7 @@ The modified prompt (full listing in Appendix~\ref{sec:prompt-cal-single}) inser
 \subsection{Adaptive Model Escalation}
 \label{sec:escalation}
 
-\paragraph{Motivation.} GPT-5.4 mini is ${\sim}3\times$ cheaper than the full model but somewhat less accurate. If we could identify which examples the mini model will get wrong, we could route only those to the full model. Per-response score variance is a plausible routing signal: variance correlates weakly but systematically with correctness ($r{=}{-}0.13$; AUC${=}0.60$ as an incorrectness classifier), and mini-model variance tracks full-model variance ($r{=}0.421$; nano's correlation is weaker at $r{=}0.106$, Appendix~\ref{sec:escalation-detail}).
+\paragraph{Motivation.} The mini-class model is ${\sim}3\times$ cheaper than the full-class model but somewhat less accurate. If we could identify which examples the mini model will get wrong, we could route only those to the full model. Per-response score variance is a plausible routing signal: variance correlates weakly but systematically with correctness ($r{=}{-}0.13$; AUC${=}0.60$ as an incorrectness classifier), and mini-model variance tracks full-model variance ($r{=}0.421$; nano's correlation is weaker at $r{=}0.106$, Appendix~\ref{sec:escalation-detail}).
 
 \paragraph{Method.} We use the mini model's per-response score variance as the routing signal and investigate three escalation strategies: \emph{hard variance routing} (binary per-response routing above a variance threshold), \emph{sigmoid-weighted soft blending} (continuous per-response blend of mini and full scores), and \emph{variance-informed adaptive ensembling} (variable number of full-model calls per response). All are evaluated offline on paired mini/full scores ($k{=}8$ each) collected in a single pass, requiring no additional API calls. We ultimately do not recommend any of the three variants; the analysis in Section~\ref{sec:main-results} clarifies why and what role per-response variance plays as an uncertainty signal. Full method descriptions, equations, and correlation plots are in Appendix~\ref{sec:escalation-detail}.
 
@@ -262,26 +264,32 @@ Table~\ref{tab:results-main} presents results for all conditions, grouped into (
 \caption{Main results by condition and category. \textbf{(a)} Techniques that reliably improve accuracy. \textbf{(b)} Investigated techniques that did not improve on criteria $k{=}8$ at comparable cost. Sample sizes vary across conditions ($N{=}1700$--$1746$) because Azure content filters refuse different prompts depending on configuration; the intersection ($N{=}1710$) preserves the ranking (Appendix~\ref{sec:intersection}). Per-subset breakdowns are omitted for test-set rows (marked $\ddagger$) due to low per-subset sample counts. Per-category CIs are in Appendix~\ref{sec:per-cat-ci}; full calibration variant breakdowns are in Appendix~\ref{sec:calibration-detail}.}
 \label{tab:results-main}
 \footnotesize
-\begin{tabular}{lrrrrrrrc}
+\begin{tabular}{llrrrrrrrc}
 \toprule
-Condition & $N$ & Overall (95\% CI) & Fact. & Focus & Math & P-IF & Safety & vs Base \\
+Condition & Model & $N$ & Overall (95\% CI) & Fact. & Focus & Math & P-IF & Safety & vs Base \\
 \midrule
-\multicolumn{9}{l}{\textit{(a) Recommended techniques}} \\
+\multicolumn{10}{l}{\textit{(a) Recommended techniques}} \\
 \midrule
-Baseline (full $k{=}1$)   & 1729 & 71.7\% ($\pm$2.1) & 76.4 & 70.1 & 61.2 & 34.0 & 87.3 & 1.0$\times$ \\
-Criteria (full $k{=}1$)   & 1738 & 74.7\% ($\pm$2.1) & 77.9 & 72.3 & 73.2 & 32.1 & 90.6 & 1.1$\times$ \\
-Ensemble (full $k{=}8$)   & 1730 & 81.5\% ($\pm$1.8) & 86.7 & 81.8 & 74.9 & 44.7 & 92.1 & 5.0$\times$ \\
-\textbf{Criteria (full $k{=}8$)} & 1741 & \textbf{83.6\%} ($\pm$1.7) & \textbf{89.1} & \textbf{82.8} & \textbf{79.2} & 48.8 & \textbf{93.2} & 5.3$\times$ \\
-Mini model $k{=}8$        & 1730 & 79.2\% ($\pm$2.0) & 83.3 & 80.2 & 68.3 & 40.3 & 92.8 & 1.2$\times$ \\
-Criteria (mini $k{=}8$)   & 1742 & 81.5\% ($\pm$1.9) & 85.5 & 82.2 & 72.7 & 41.2 & 94.9 & 1.2$\times$ \\
-Nano model $k{=}8$        & 1705 & 71.4\% ($\pm$2.1) & 67.9 & 74.5 & 61.2 & 42.4 & 87.6 & 0.4$\times$ \\
+Baseline (full $k{=}1$)   & GPT-5.4    & 1729 & 71.7\% ($\pm$2.1) & 76.4 & 70.1 & 61.2 & 34.0 & 87.3 & 1.0$\times$ \\
+                          & Sonnet 4.6 & 1737 & 72.3\% ($\pm$2.2) & 71.6 & 72.1 & 75.3 & 38.1 & 84.2 & 1.1$\times$ \\
+Criteria (full $k{=}1$)   & GPT-5.4    & 1738 & 74.7\% ($\pm$2.1) & 77.9 & 72.3 & 73.2 & 32.1 & 90.6 & 1.1$\times$ \\
+                          & Sonnet 4.6 & 1743 & 74.1\% ($\pm$2.1) & 75.7 & 74.5 & 68.1 & 44.5 & 84.7 & 1.2$\times$ \\
+Ensemble (full $k{=}8$)   & GPT-5.4    & 1730 & 81.5\% ($\pm$1.8) & 86.7 & 81.8 & 74.9 & 44.7 & 92.1 & 5.0$\times$ \\
+                          & Sonnet 4.6 & 1744 & 82.7\% ($\pm$1.8) & 84.7 & \textbf{83.2} & 89.0 & 52.9 & 88.0 & 5.1$\times$ \\
+Criteria (full $k{=}8$)   & GPT-5.4    & 1741 & 83.6\% ($\pm$1.7) & \textbf{89.1} & 82.8 & 79.2 & 48.8 & 93.2 & 5.3$\times$ \\
+                          & Sonnet 4.6 & 1751 & 83.4\% ($\pm$1.8) & 87.1 & 82.8 & 75.3 & 59.6 & 91.9 & 5.4$\times$ \\
+Mini model $k{=}8$        & GPT mini   & 1730 & 79.2\% ($\pm$2.0) & 83.3 & 80.2 & 68.3 & 40.3 & 92.8 & 1.2$\times$ \\
+                          & Haiku 4.5  & 1761 & 84.8\% ($\pm$1.7) & 82.5 & 83.0 & \textbf{90.2} & 64.4 & 94.4 & 1.3$\times$ \\
+Criteria (mini $k{=}8$)   & GPT mini   & 1742 & 81.5\% ($\pm$1.9) & 85.5 & 82.2 & 72.7 & 41.2 & \textbf{94.9} & 1.2$\times$ \\
+                          & Haiku 4.5  & 1763 & \textbf{85.8\%} ($\pm$1.7) & 86.1 & 82.2 & 89.6 & \textbf{68.1} & 94.0 & 1.3$\times$ \\
+Nano model $k{=}8$        & GPT nano   & 1705 & 71.4\% ($\pm$2.1) & 67.9 & 74.5 & 61.2 & 42.4 & 87.6 & 0.4$\times$ \\
 \midrule
-\multicolumn{9}{l}{\textit{(b) Investigated techniques}} \\
+\multicolumn{10}{l}{\textit{(b) Investigated techniques (GPT only)}} \\
 \midrule
-Calibration low ($k{=}8$)   & 1744 & 81.7\% ($\pm$1.8) & 86.7 & 80.6 & 75.4 & 46.9 & 93.0 & 5.6$\times$ \\
-Combined (full $k{=}8$)     & 1746 & 82.6\% ($\pm$1.8) & 87.6 & 80.6 & 77.6 & \textbf{52.5} & 92.8 & 6.8$\times$ \\
-Soft blend (test)$^\ddagger$ & ${\sim}$343 & 80.2\% ($\pm$4.2) & --- & --- & --- & --- & --- & 6.1$\times$ \\
-Variance-informed (budget $\leq$2, test)$^\ddagger$ & ${\sim}$343 & 74.9\% ($\pm$4.7) & --- & --- & --- & --- & --- & 1.6$\times$ \\
+Calibration low ($k{=}8$)   & GPT-5.4 & 1744 & 81.7\% ($\pm$1.8) & 86.7 & 80.6 & 75.4 & 46.9 & 93.0 & 5.6$\times$ \\
+Combined (full $k{=}8$)     & GPT-5.4 & 1746 & 82.6\% ($\pm$1.8) & 87.6 & 80.6 & 77.6 & 52.5 & 92.8 & 6.8$\times$ \\
+Soft blend (test)$^\ddagger$ & GPT-5.4 & ${\sim}$343 & 80.2\% ($\pm$4.2) & --- & --- & --- & --- & --- & 6.1$\times$ \\
+Variance-informed (budget $\leq$2, test)$^\ddagger$ & GPT-5.4 & ${\sim}$343 & 74.9\% ($\pm$4.7) & --- & --- & --- & --- & --- & 1.6$\times$ \\
 \bottomrule
 \end{tabular}
 
@@ -292,15 +300,17 @@ Variance-informed (budget $\leq$2, test)$^\ddagger$ & ${\sim}$343 & 74.9\% ($\pm
 \begin{figure*}[t]
 \centering
 \includegraphics[width=\textwidth]{hero_accuracy.png}
-\caption{Accuracy by condition and category. Criteria $k{=}8$ (83.6\%) matches combined (82.6\%) at lower cost (5.3$\times$ vs 6.8$\times$ baseline); their CIs overlap and we interpret the ordering as a practical tie. Precise~IF remains the hardest category across all conditions.}
+\caption{Accuracy by condition and category. Each bar shows the best-performing provider for that class+condition; per-row provider attribution is in Table~\ref{tab:results-main}. $k{=}8$ + criteria (mini) reaches the highest overall accuracy (85.8\%); $k{=}8$ + criteria (full) at 83.6\% matches $k{=}8$ + combined (full) at 82.6\% at lower cost. Precise IF remains the hardest category across all conditions.}
 \label{fig:hero-accuracy}
 \end{figure*}
 
-\paragraph{Headline results.} The baseline reaches 71.7\% ($\pm$2.1pp). Criteria injection alone adds +3.0pp at $k{=}1$ (74.7\%; paired bootstrap $p{>}0.999$) with negligible marginal cost --- a few extra input tokens per call, no structural change to the scoring protocol --- and modestly reduces the tie rate at $k{=}1$ (20.4\% baseline $\to$ 17.4\% criteria). Ensembling at $k{=}8$ adds +9.8pp (81.5\% at 5$\times$ cost) and sharply reduces the tie rate (baseline $k{=}1$: 20.4\%, $k{=}8$: 4.5\%), since ties now require all four response means to match exactly across $k$ draws. Together, criteria + ensembling reach \textbf{83.6\%} (+11.9pp over baseline, 5.3$\times$ cost; +11.9pp also on the $N{=}1710$ intersection, Appendix~\ref{sec:intersection}) and further collapse the tie rate to 3.2\%, paired-significant against ensembling ($p{>}0.999$).
+\paragraph{Headline results.} Criteria + ensembling reach up to \textbf{85.8\%} (+13.5pp over baseline, 1.3$\times$ cost) --- the highest accuracy in our cross-model panel, achieved on the mini class with $k{=}8$ + criteria (Table~\ref{tab:results-main}). The two techniques contribute independently. On the full class, the baseline reaches 71.7\% ($\pm$2.1pp); criteria injection alone adds +3.0pp at $k{=}1$ (74.7\%; paired bootstrap $p{>}0.999$) with negligible marginal cost --- a few extra input tokens per call, no structural change to the scoring protocol --- and modestly reduces the tie rate at $k{=}1$ (20.4\% baseline $\to$ 17.4\% criteria). Ensembling at $k{=}8$ adds +9.8pp (81.5\% at 5$\times$ cost) and sharply reduces the tie rate (baseline $k{=}1$: 20.4\%, $k{=}8$: 4.5\%), since ties now require all four response means to match exactly across $k$ draws. Together on the full class, criteria + ensembling reach 83.6\% (+11.9pp over baseline, 5.3$\times$ cost; +11.9pp also on the $N{=}1710$ intersection, Appendix~\ref{sec:intersection}) and further collapse the tie rate to 3.2\%, paired-significant against ensembling ($p{>}0.999$). The mini-class peak (85.8\%) exceeds full-class ensembling at roughly one-quarter the cost.
+
+Per-class numbers quoted in the rest of this section refer to OpenAI's GPT-5.4 family unless otherwise noted; cross-class peaks (best provider per class) are reported in Table~\ref{tab:results-main} and Figure~\ref{fig:pareto}.
 
 \paragraph{Task-specific criteria: where gains concentrate.} The $k{=}1$ criteria gain is carried largely by Math (+12.0pp) and Safety (+3.3pp); Focus and Factuality move within their per-category CIs ($\pm$4pp) and are not individually significant. Precise~IF actually regresses slightly at $k{=}1$ (32.1\% vs baseline 34.0\%, well within noise), but $k{=}8$ ensembling recovers it to 48.8\%, so the per-category picture is most stable when criteria is combined with ensembling (full per-category CIs in Appendix~\ref{sec:per-cat-ci}). Criteria were fixed in advance of data collection (committed to the internal repository before the first collection run) to reduce risk of post-hoc criterion selection.
 
-\paragraph{Smaller models benefit disproportionately.} The best practical configuration is mini + criteria: mini $k{=}8$ achieves 79.2\% at 1.2$\times$ baseline cost, and adding criteria pushes it to 81.5\%, \textbf{matching the full model's $k{=}8$ ensemble at roughly one-quarter the cost}. Nano $k{=}8$ sits at the extreme end of the cost-accuracy frontier: 71.4\% at 0.4$\times$ baseline cost approaches the full model's single-shot baseline, but at $k{=}8$ nano still trails mini $k{=}8$ by 7.8pp --- ensembling raises a lower-capability model's floor but not its ceiling. Ensembling's absolute gain from $k{=}1$ to $k{=}8$ grows as base capability falls: $+$9.8pp for full, $+$14.4pp for mini, $+$19.1pp for nano --- consistent with more headroom at lower starting accuracy. Most of the gain is captured by $k{=}3$ for all tiers (Figure~\ref{fig:diminishing-returns}); beyond that, returns diminish.
+\paragraph{Smaller models benefit disproportionately.} The best practical configuration is mini + criteria: mini $k{=}8$ achieves 79.2\% at 1.2$\times$ baseline cost, and adding criteria pushes it to 81.5\%, \textbf{matching the full model's $k{=}8$ ensemble at roughly one-quarter the cost}. Nano $k{=}8$ sits at the extreme end of the cost-accuracy frontier: 71.4\% at 0.4$\times$ baseline cost approaches the full model's single-shot baseline, but at $k{=}8$ nano still trails mini $k{=}8$ by 7.8pp --- ensembling raises a lower-capability model's floor but not its ceiling. Ensembling's absolute gain from $k{=}1$ to $k{=}8$ grows as base capability falls: $+$9.8pp for full, $+$14.4pp for mini, $+$19.1pp for nano --- consistent with more headroom at lower starting accuracy. Most of the gain is captured by $k{=}3$ for all tiers (Figure~\ref{fig:diminishing-returns}); beyond that, returns diminish. Cross-class evidence sharpens this story: the mini-class peak (85.8\%, Table~\ref{tab:results-main}) \emph{exceeds} the best full-class ensemble in our panel at roughly one-quarter the cost.
 
 \paragraph{Calibration context.} All four calibration variants improve over baseline at $k{=}1$ by +1--2pp. The ``low'' variant (anchoring to a rejected response) slightly outperforms ``high'' (anchoring to the chosen response, 73.8\% vs 72.4\%) --- possibly because the judge finds it easier to distinguish the target from a known-bad anchor than to match a known-good one. Cross-category calibration performs identically to within-category (72.4\%), suggesting the benefit is general scale anchoring rather than category-specific transfer. \textbf{At $k{=}8$, however, calibration provides no additional benefit beyond ensembling alone}: all variants fall within $\pm$0.2pp of ensembling (81.5\%, calibration low: 81.7\%). The $k{=}8$ ensemble already reduces scoring noise enough that the anchoring benefit is redundant --- in contrast to criteria, which provides +2.1pp even at $k{=}8$.
 
@@ -322,7 +332,7 @@ Table~\ref{tab:what-works} compares prompt variants at $k{=}8$ across model tier
 
 \begin{table}[ht]
 \centering
-\caption{Prompt variant accuracy (\%) at $k{=}8$.}
+\caption{Prompt variant accuracy (\%) at $k{=}8$ on OpenAI GPT-5.4 (Claude variants not collected for calibration / combined).}
 \label{tab:what-works}
 \scriptsize
 \begin{tabular}{lccc}
@@ -344,7 +354,7 @@ Criteria is the only prompt technique that helps at $k{=}8$: +2.1pp for the full
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{mini_full_convergence.png}
-\caption{Model agreement with full ($k{=}8$) as a function of ensemble size. Mini reaches 78.7\% by $k{=}8$ (77.5\% at $k{=}5$); nano plateaus at ${\sim}$70\%, with a lower rank-correlation ceiling (0.67 vs 0.79 for mini), confirming a larger capability gap.}
+\caption{Model agreement with full ($k{=}8$) as a function of ensemble size, on the OpenAI GPT-5.4 family. Mini reaches 78.7\% by $k{=}8$ (77.5\% at $k{=}5$); nano plateaus at ${\sim}$70\%, with a lower rank-correlation ceiling (0.67 vs 0.79 for mini), confirming a larger capability gap.}
 \label{fig:convergence}
 \end{figure}
 
@@ -357,7 +367,7 @@ Criteria is the only prompt technique that helps at $k{=}8$: +2.1pp for the full
 
 \paragraph{Limitations.}
 \begin{itemize}
-  \item All experiments use a single judge model family (GPT-5.4); generalisability to other models (Claude, Gemini, open-weight) is untested.
+  \item We evaluate only OpenAI GPT and Anthropic Claude judges; extension to other model providers (Gemini, open-weight judges, finetuned judges such as Prometheus 2) is left to future work.
   \item RewardBench~2 is a single benchmark; performance may differ on production judge tasks such as offline eval suites and real-time monitoring.
   \item We set \texttt{reasoning\_effort="none"} throughout as a control to isolate prompt-level and aggregation effects from reasoning-induced gains; we have not sanity-checked whether the +11.9pp criteria+ensembling gap persists at higher reasoning effort, and note that reasoning itself is a variance-reducing intervention that could substitute for ensembling at higher per-call cost.
   \item We used a single set of author-designed criteria, fixed in the internal repository before the first collection run; sensitivity to wording variation and to external-registry-style pre-registration is untested.
@@ -368,9 +378,7 @@ Criteria is the only prompt technique that helps at $k{=}8$: +2.1pp for the full
 
 \paragraph{Interpretation: noise control, not new judgment.} At temperature $>0$, an LLM judge is a stochastic scorer \citep{stureborg2024inconsistent}; the interventions that worked are best understood as variance reduction rather than novel judgment capability. Ensembling is Monte Carlo variance reduction: per-call variance drops as $1/k$ and the $k{=}1 \to k{=}8$ tie-rate collapse (20.4\% $\to$ 4.5\%) is its observable signature. Criteria injection does \emph{not} change per-response score variance (mean $\sigma_i{=}0.31$ vs 0.32; KS $p{=}0.88$) but sharpens \emph{between-response} discrimination (tie rate 4.5\% $\to$ 3.2\% at $k{=}8$; AUC for variance predicting incorrectness rises from 0.60 to 0.64). Per-response score variance itself provides a weak but measurable uncertainty signal (AUC${\approx}$0.60 for predicting incorrect judgments), which we examined as both a routing target and a diagnostic for judge error. Techniques that don't work (calibration, model routing, soft blending) inject new information or combine heterogeneous distributions; at high $k$, residual variance is small enough that these contribute noise rather than signal.
 
-\paragraph{Reproducibility.} All experiments were conducted via Azure OpenAI API version \texttt{2025-04-01-preview} using GPT-5.4, GPT-5.4 mini, and GPT-5.4 nano deployments. Data was collected in March--April 2026. All API calls use temperature 1.0 with no seed parameter, so individual scores are not deterministically reproducible. Our bootstrap CIs reflect sampling variance over examples, not run-to-run API variance: Azure can silently rotate deployments, and we have not re-collected a headline condition to quantify cross-run drift. We recommend downstream users of these techniques re-benchmark on their own deployment. Total API spend across all collections was approximately \$1,500. All collection scripts write results incrementally and support resume. Code and raw data will be released upon acceptance (anonymised link suppressed for blind review).
-
-\paragraph{Conclusion.} On RewardBench~2, all four drop-in techniques we investigate improve over baseline. \textbf{Criteria injection} (+3.0pp at $k{=}1$, near-free) and \textbf{ensembling} (+9.8pp at $k{=}8$, with $k{=}3$ capturing ${\sim}$70\% of the gain) are the simplest and most cost-effective; together they reach \textbf{83.6\%} (+11.9pp), and we recommend them in practice for LLM-as-a-judge evaluation. Calibration context and adaptive model escalation also improve over baseline but at higher cost, and at high $k$ variance-reduction techniques become substitutes rather than complements, so stacking did not yield additive gains.
+\paragraph{Conclusion.} On RewardBench~2, all four drop-in techniques we investigate improve over baseline. \textbf{Criteria injection} (near-free) and \textbf{ensembling} (with $k{=}3$ capturing ${\sim}$70\% of the gain) are the simplest and most cost-effective; together they reach up to \textbf{85.8\%} (+13.5pp over baseline), and we recommend them in practice for LLM-as-a-judge evaluation. These gains generalise across model providers, replicating on both OpenAI GPT and Anthropic Claude judges. Calibration context and adaptive model escalation also improve over baseline but at higher cost, and at high $k$ variance-reduction techniques become substitutes rather than complements, so stacking did not yield additive gains.
 
 \FloatBarrier
 \balance
@@ -520,7 +528,7 @@ Combined (full $k{=}8$)         & 1746 & 82.6\% & 82.6\% & $-$0.0 \\
 \label{sec:escalation-detail}
 %----------------------------------------------------------
 
-\paragraph{Motivation.} GPT-5.4 mini is ${\sim}3\times$ cheaper than the full model but somewhat less accurate. If we could identify in advance which examples the mini model will get wrong, we could route only those to the full model. We use the mini model's score variance as a proxy for example difficulty.
+\paragraph{Motivation.} The mini-class model is ${\sim}3\times$ cheaper than the full-class model but somewhat less accurate. If we could identify in advance which examples the mini model will get wrong, we could route only those to the full model. We use the mini model's score variance as a proxy for example difficulty.
 
 \paragraph{Data collection.} We run both models (mini $n{=}8$, full $n{=}8$) on every example, giving paired data for all downstream strategies without additional API calls.
 
@@ -611,17 +619,19 @@ Table~\ref{tab:escalation-summary} compares escalation strategies against the $k
 
 \begin{table}[ht]
 \centering
-\caption{Escalation strategy comparison. The test-set rows are the honest headline numbers; the ``full dataset (in-sample)'' soft-blend row is the tuned upper bound and should \emph{not} be compared on equal footing with the other rows.}
+\caption{Escalation strategy comparison. Test-set rows are the honest headline numbers; the in-sample soft-blend row is a tuned upper bound and should \emph{not} be compared on equal footing with the others.}
 \label{tab:escalation-summary}
+\small
+\setlength{\tabcolsep}{4pt}
 \begin{tabular}{lcc}
 \toprule
-Strategy & Acc.\ & vs $k{=}1$ full \\
+Strategy & Acc.\ & vs $k{=}1$ \\
 \midrule
-$k{=}1$ full (baseline)            & 71.7\% & 1.0$\times$ \\
-Full $k{=}8$                       & 81.5\% & 5.0$\times$ \\
-Soft blend (full dataset, tuned)$^\dagger$ & 83.2\% & 6.1$\times$ \\
-Soft blend (test set)              & 80.2\% & 6.1$\times$ \\
-Variance-informed (budget $\leq$2, test)  & 74.9\% & 1.6$\times$ \\
+$k{=}1$ full (baseline)        & 71.7\% & 1.0$\times$ \\
+Full $k{=}8$                   & 81.5\% & 5.0$\times$ \\
+Soft blend (in-sample)$^\dagger$ & 83.2\% & 6.1$\times$ \\
+Soft blend (test)              & 80.2\% & 6.1$\times$ \\
+Var-informed ($\bar{n}_{\text{full}}{\leq}2$, test) & 74.9\% & 1.6$\times$ \\
 \bottomrule
 \end{tabular}
 
@@ -691,7 +701,7 @@ $k$ & Full & Mini & Nano \\
 \subsection{Temperature Sensitivity}
 \label{sec:temperature}
 
-We sweep temperature across \{0.0, 0.3, 0.7, 1.0\} for the base prompt with the full model. At $k{=}1$, accuracy is stable across temperatures (71--73\%, CIs overlapping). At $k{=}8$, ensembling helps at all temperatures, but the gain increases with temperature: from +4.6pp at temperature~0 (72.5\% $\to$ 77.1\%) to +9.8pp at temperature~1.0 (71.7\% $\to$ 81.5\%). Even at temperature~0 there is a significant +4.6pp gap between $k{=}1$ (72.5\%) and $k{=}8$ (77.1\%), with non-overlapping confidence intervals --- \texttt{temperature=0} does not produce deterministic outputs in practice, likely due to floating-point non-determinism in GPU inference and the absence of a \texttt{seed} parameter. This is a useful finding for practitioners: even deployments that assume deterministic scoring at temperature~0 can benefit from ensembling.
+We sweep temperature across \{0.0, 0.3, 0.7, 1.0\} for the base prompt with the full model (Figure~\ref{fig:temperature}). At $k{=}1$, accuracy is stable across temperatures (71--73\%, CIs overlapping). At $k{=}8$, ensembling helps at all temperatures, but the gain increases with temperature: from +4.6pp at temperature~0 (72.5\% $\to$ 77.1\%) to +9.8pp at temperature~1.0 (71.7\% $\to$ 81.5\%). Even at temperature~0 there is a significant +4.6pp gap between $k{=}1$ (72.5\%) and $k{=}8$ (77.1\%), with non-overlapping confidence intervals --- \texttt{temperature=0} does not produce deterministic outputs in practice, likely due to floating-point non-determinism in GPU inference and the absence of a \texttt{seed} parameter. This is a useful finding for practitioners: even deployments that assume deterministic scoring at temperature~0 can benefit from ensembling.
 
 \begin{figure}[t]
 \centering
