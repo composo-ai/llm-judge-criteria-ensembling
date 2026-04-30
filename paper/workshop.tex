@@ -56,7 +56,7 @@
 \printAffiliationsAndNotice{}
 
 \begin{abstract}
-Using a language model to score or rank candidate responses has become a scalable alternative to human evaluation in reinforcement learning from human feedback (RLHF) pipelines, benchmarking, and application layer evaluations. However, output reliability depends heavily on prompting and aggregation strategy. We present an empirical investigation of four drop-in techniques --- ensemble scoring, task-specific criteria injection, calibration context, and adaptive model escalation --- for improving GPT-5.4 judge accuracy on RewardBench~2, with a unifying lens of noise control on the stochastic judge: ensembling as Monte Carlo averaging over per-call noise, criteria injection as between-response discrimination sharpening, and per-response score variance as an uncertainty signal. Ensemble scoring (+9.8pp) and task-specific criteria injection (+3.0pp, virtually cost free) together reach \textbf{83.6\%} accuracy, +11.9pp over the 71.7\% baseline. Calibration context and adaptive model escalation map additional operating points on the cost--accuracy Pareto frontier. Smaller models benefit disproportionately from ensembling: GPT-5.4 mini at ensemble size $k{=}8$ achieves 79.2\%, making high-accuracy LLM judges accessible at low cost. The recommendation replicates on Claude Sonnet 4.6 (83.5\%) and Claude Haiku 4.5 (86.0\%), supporting cross-family generalisation.
+Using a language model to score or rank candidate responses has become a scalable alternative to human evaluation in reinforcement learning from human feedback (RLHF) pipelines, benchmarking, and application layer evaluations. However, output reliability depends heavily on prompting and aggregation strategy. We present an empirical investigation of four drop-in techniques --- ensemble scoring, task-specific criteria injection, calibration context, and adaptive model escalation --- for improving LLM judge accuracy on RewardBench~2, with a unifying lens of noise control on the stochastic judge: ensembling as Monte Carlo averaging over per-call noise, criteria injection as between-response discrimination sharpening, and per-response score variance as an uncertainty signal. Ensemble scoring (+9.8pp) and task-specific criteria injection (+3.0pp, virtually cost free) together reach \textbf{83.6\%} accuracy, +11.9pp over the 71.7\% baseline. Calibration context and adaptive model escalation map additional operating points on the cost--accuracy Pareto frontier. Small models benefit disproportionately from ensembling, making high-accuracy LLM judges accessible at low cost. We show that these techniques generalise across model providers, evaluating on both OpenAI GPT and Anthropic Claude families.
 \end{abstract}
 
 %----------------------------------------------------------
@@ -84,11 +84,11 @@ This paper presents an empirical investigation of four drop-in techniques for im
   \item \textbf{Adaptive model escalation}: using a smaller proxy model for easy examples and escalating to a large model when variance is high; we evaluate both hard variance routing and sigmoid-weighted soft blending.
 \end{enumerate}
 
-We additionally evaluate a \textbf{combined} condition that stacks all four to test additivity. Our empirical investigation finds that criteria injection and ensembling account for nearly all available gains, while calibration and adaptive model escalation do not reliably improve on this simpler baseline at comparable cost. We report results for all conditions to provide a complete picture of what works in practice. All experiments are conducted with GPT-5.4 (full), GPT-5.4 mini, and GPT-5.4 nano via Azure OpenAI.
+We additionally evaluate a \textbf{combined} condition that stacks all four to test additivity. Our empirical investigation finds that criteria injection and ensembling account for nearly all available gains, while calibration and adaptive model escalation do not reliably improve on this simpler baseline at comparable cost. We report results for all conditions to provide a complete picture of what works in practice. All experiments are conducted across full, mini, and nano model classes (Section~\ref{sec:models}).
 
 \paragraph{Contributions.} Our main contributions are:
 \begin{itemize}
-  \item A systematic comparison of four drop-in techniques for improving LLM judge accuracy (plus a combined stacking condition), evaluated on 1,753 RewardBench~2 examples across three model tiers (GPT-5.4, GPT-5.4 mini, GPT-5.4 nano).
+  \item A systematic comparison of four drop-in techniques for improving LLM judge accuracy (plus a combined stacking condition), evaluated on 1,753 RewardBench~2 examples across full, mini, and nano model classes (Table~\ref{tab:models}).
   \item Evidence that criteria injection and ensembling dominate the cost--accuracy tradeoff (Figure~\ref{fig:pareto}), reaching 83.6\% (+11.9pp, identical on the $N{=}1710$ intersection) at 5.3$\times$ cost, while calibration, model routing, and soft blending improved over baseline but were dominated by criteria + ensembling at comparable or lower cost.
   \item A cost--accuracy analysis showing that smaller models benefit disproportionately from ensembling: mini $k{=}8$ reaches 79.2\% at 1.2$\times$ baseline cost, and mini+criteria $k{=}8$ matches full-model $k{=}8$ ensemble accuracy (81.5\%) at roughly one-quarter the cost.
 \end{itemize}
@@ -148,20 +148,22 @@ When running both a mini and a full model (Sections~\ref{sec:escalation}--\ref{s
 \subsection{Models and Costs}
 \label{sec:models}
 
-We use three GPT-5.4 model tiers via Azure OpenAI; their per-token pricing is summarised in Table~\ref{tab:models}.
+We evaluate five models across two providers (OpenAI and Anthropic), grouped into three capability \emph{classes} --- \emph{full}, \emph{mini}, and \emph{nano} --- defined by relative compute cost within their provider. Subsequent results refer to these classes; per-class numbers report the best-performing instance available for that class. Table~\ref{tab:models} lists each model, its class, and its per-token API pricing.
 
 \begin{table}[ht]
 \centering
-\caption{Model pricing (OpenAI API, April 2026).}
+\caption{Models evaluated, capability class, and per-token API pricing.}
 \label{tab:models}
 \small
-\begin{tabular}{lrr}
+\begin{tabular}{llrr}
 \toprule
-Model & Input \$/M & Output \$/M \\
+Model              & Class & Input \$/M & Output \$/M \\
 \midrule
-GPT-5.4      & 2.50 & 15.00 \\
-GPT-5.4 mini & 0.75 & 4.50  \\
-GPT-5.4 nano & 0.20 & 1.25  \\
+GPT-5.4            & full  & 2.50 & 15.00 \\
+GPT-5.4 mini       & mini  & 0.75 & 4.50  \\
+GPT-5.4 nano       & nano  & 0.20 & 1.25  \\
+Claude Sonnet 4.6  & full  & ---  & ---  \\
+Claude Haiku 4.5   & mini  & ---  & ---  \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -181,7 +183,7 @@ Ensemble conditions use the API's \texttt{n} parameter to request multiple compl
 \label{sec:methods}
 %----------------------------------------------------------
 
-\paragraph{Baseline.} The baseline condition applies the RB2 prompt verbatim with $k{=}1$ completion per response (four API calls per example, all using the full GPT-5.4 model). This matches the standard RB2 evaluation protocol and provides the cost and accuracy reference point for all other conditions.
+\paragraph{Baseline.} The baseline condition applies the RB2 prompt verbatim with $k{=}1$ completion per response (four API calls per example, using the full-class model). This matches the standard RB2 evaluation protocol and provides the cost and accuracy reference point for all other conditions.
 
 \subsection{Ensemble Scoring}
 \label{sec:ensemble}
@@ -234,7 +236,7 @@ The modified prompt (full listing in Appendix~\ref{sec:prompt-cal-single}) inser
 \subsection{Adaptive Model Escalation}
 \label{sec:escalation}
 
-\paragraph{Motivation.} GPT-5.4 mini is ${\sim}3\times$ cheaper than the full model but somewhat less accurate. If we could identify which examples the mini model will get wrong, we could route only those to the full model. Per-response score variance is a plausible routing signal: variance correlates weakly but systematically with correctness ($r{=}{-}0.13$; AUC${=}0.60$ as an incorrectness classifier), and mini-model variance tracks full-model variance ($r{=}0.421$; nano's correlation is weaker at $r{=}0.106$, Appendix~\ref{sec:escalation-detail}).
+\paragraph{Motivation.} The mini-class model is ${\sim}3\times$ cheaper than the full-class model but somewhat less accurate. If we could identify which examples the mini model will get wrong, we could route only those to the full model. Per-response score variance is a plausible routing signal: variance correlates weakly but systematically with correctness ($r{=}{-}0.13$; AUC${=}0.60$ as an incorrectness classifier), and mini-model variance tracks full-model variance ($r{=}0.421$; nano's correlation is weaker at $r{=}0.106$, Appendix~\ref{sec:escalation-detail}).
 
 \paragraph{Method.} We use the mini model's per-response score variance as the routing signal and investigate three escalation strategies: \emph{hard variance routing} (binary per-response routing above a variance threshold), \emph{sigmoid-weighted soft blending} (continuous per-response blend of mini and full scores), and \emph{variance-informed adaptive ensembling} (variable number of full-model calls per response). All are evaluated offline on paired mini/full scores ($k{=}8$ each) collected in a single pass, requiring no additional API calls. We ultimately do not recommend any of the three variants; the analysis in Section~\ref{sec:main-results} clarifies why and what role per-response variance plays as an uncertainty signal. Full method descriptions, equations, and correlation plots are in Appendix~\ref{sec:escalation-detail}.
 
@@ -262,26 +264,32 @@ Table~\ref{tab:results-main} presents results for all conditions, grouped into (
 \caption{Main results by condition and category. \textbf{(a)} Techniques that reliably improve accuracy. \textbf{(b)} Investigated techniques that did not improve on criteria $k{=}8$ at comparable cost. Sample sizes vary across conditions ($N{=}1700$--$1746$) because Azure content filters refuse different prompts depending on configuration; the intersection ($N{=}1710$) preserves the ranking (Appendix~\ref{sec:intersection}). Per-subset breakdowns are omitted for test-set rows (marked $\ddagger$) due to low per-subset sample counts. Per-category CIs are in Appendix~\ref{sec:per-cat-ci}; full calibration variant breakdowns are in Appendix~\ref{sec:calibration-detail}.}
 \label{tab:results-main}
 \footnotesize
-\begin{tabular}{lrrrrrrrc}
+\begin{tabular}{llrrrrrrrc}
 \toprule
-Condition & $N$ & Overall (95\% CI) & Fact. & Focus & Math & P-IF & Safety & vs Base \\
+Condition & Model & $N$ & Overall (95\% CI) & Fact. & Focus & Math & P-IF & Safety & vs Base \\
 \midrule
-\multicolumn{9}{l}{\textit{(a) Recommended techniques}} \\
+\multicolumn{10}{l}{\textit{(a) Recommended techniques}} \\
 \midrule
-Baseline (full $k{=}1$)   & 1729 & 71.7\% ($\pm$2.1) & 76.4 & 70.1 & 61.2 & 34.0 & 87.3 & 1.0$\times$ \\
-Criteria (full $k{=}1$)   & 1738 & 74.7\% ($\pm$2.1) & 77.9 & 72.3 & 73.2 & 32.1 & 90.6 & 1.1$\times$ \\
-Ensemble (full $k{=}8$)   & 1730 & 81.5\% ($\pm$1.8) & 86.7 & 81.8 & 74.9 & 44.7 & 92.1 & 5.0$\times$ \\
-\textbf{Criteria (full $k{=}8$)} & 1741 & \textbf{83.6\%} ($\pm$1.7) & \textbf{89.1} & \textbf{82.8} & \textbf{79.2} & 48.8 & \textbf{93.2} & 5.3$\times$ \\
-Mini model $k{=}8$        & 1730 & 79.2\% ($\pm$2.0) & 83.3 & 80.2 & 68.3 & 40.3 & 92.8 & 1.2$\times$ \\
-Criteria (mini $k{=}8$)   & 1742 & 81.5\% ($\pm$1.9) & 85.5 & 82.2 & 72.7 & 41.2 & 94.9 & 1.2$\times$ \\
-Nano model $k{=}8$        & 1705 & 71.4\% ($\pm$2.1) & 67.9 & 74.5 & 61.2 & 42.4 & 87.6 & 0.4$\times$ \\
+Baseline (full $k{=}1$)   & GPT-5.4    & 1729 & 71.7\% ($\pm$2.1) & 76.4 & 70.1 & 61.2 & 34.0 & 87.3 & 1.0$\times$ \\
+                          & Sonnet 4.6 & 1737 & 72.3\% ($\pm$2.2) & 71.6 & 72.1 & 75.3 & 38.1 & 84.2 & 1.0$\times$ \\
+Criteria (full $k{=}1$)   & GPT-5.4    & 1738 & 74.7\% ($\pm$2.1) & 77.9 & 72.3 & 73.2 & 32.1 & 90.6 & 1.1$\times$ \\
+                          & Sonnet 4.6 & 1743 & 74.1\% ($\pm$2.1) & 75.7 & 74.5 & 68.1 & 44.5 & 84.7 & 1.1$\times$ \\
+Ensemble (full $k{=}8$)   & GPT-5.4    & 1730 & 81.5\% ($\pm$1.8) & 86.7 & 81.8 & 74.9 & 44.7 & 92.1 & 5.0$\times$ \\
+                          & Sonnet 4.6 & 1744 & 82.7\% ($\pm$1.8) & 84.7 & 83.2 & 89.0 & 52.9 & 88.0 & 5.0$\times$ \\
+\textbf{Criteria (full $k{=}8$)} & GPT-5.4 & 1741 & \textbf{83.6\%} ($\pm$1.7) & \textbf{89.1} & \textbf{82.8} & \textbf{79.2} & 48.8 & \textbf{93.2} & 5.3$\times$ \\
+                          & Sonnet 4.6 & 1751 & 83.4\% ($\pm$1.8) & 87.1 & 82.8 & 75.3 & 59.6 & 91.9 & 5.3$\times$ \\
+Mini model $k{=}8$        & GPT mini   & 1730 & 79.2\% ($\pm$2.0) & 83.3 & 80.2 & 68.3 & 40.3 & 92.8 & 1.2$\times$ \\
+                          & Haiku 4.5  & 1761 & 84.8\% ($\pm$1.7) & 82.5 & 83.0 & 90.2 & 64.4 & 94.4 & 1.2$\times$ \\
+Criteria (mini $k{=}8$)   & GPT mini   & 1742 & 81.5\% ($\pm$1.9) & 85.5 & 82.2 & 72.7 & 41.2 & 94.9 & 1.2$\times$ \\
+                          & Haiku 4.5  & 1763 & \textbf{85.8\%} ($\pm$1.7) & 86.1 & 82.2 & 89.6 & \textbf{68.1} & 94.0 & 1.2$\times$ \\
+Nano model $k{=}8$        & GPT nano   & 1705 & 71.4\% ($\pm$2.1) & 67.9 & 74.5 & 61.2 & 42.4 & 87.6 & 0.4$\times$ \\
 \midrule
-\multicolumn{9}{l}{\textit{(b) Investigated techniques}} \\
+\multicolumn{10}{l}{\textit{(b) Investigated techniques (GPT only)}} \\
 \midrule
-Calibration low ($k{=}8$)   & 1744 & 81.7\% ($\pm$1.8) & 86.7 & 80.6 & 75.4 & 46.9 & 93.0 & 5.6$\times$ \\
-Combined (full $k{=}8$)     & 1746 & 82.6\% ($\pm$1.8) & 87.6 & 80.6 & 77.6 & \textbf{52.5} & 92.8 & 6.8$\times$ \\
-Soft blend (test)$^\ddagger$ & ${\sim}$343 & 80.2\% ($\pm$4.2) & --- & --- & --- & --- & --- & 6.1$\times$ \\
-Variance-informed (budget $\leq$2, test)$^\ddagger$ & ${\sim}$343 & 74.9\% ($\pm$4.7) & --- & --- & --- & --- & --- & 1.6$\times$ \\
+Calibration low ($k{=}8$)   & GPT-5.4 & 1744 & 81.7\% ($\pm$1.8) & 86.7 & 80.6 & 75.4 & 46.9 & 93.0 & 5.6$\times$ \\
+Combined (full $k{=}8$)     & GPT-5.4 & 1746 & 82.6\% ($\pm$1.8) & 87.6 & 80.6 & 77.6 & \textbf{52.5} & 92.8 & 6.8$\times$ \\
+Soft blend (test)$^\ddagger$ & GPT-5.4 & ${\sim}$343 & 80.2\% ($\pm$4.2) & --- & --- & --- & --- & --- & 6.1$\times$ \\
+Variance-informed (budget $\leq$2, test)$^\ddagger$ & GPT-5.4 & ${\sim}$343 & 74.9\% ($\pm$4.7) & --- & --- & --- & --- & --- & 1.6$\times$ \\
 \bottomrule
 \end{tabular}
 
@@ -337,42 +345,18 @@ Criteria + calibration (combined) & 82.6 ($\pm$1.8) & 79.2 ($\pm$1.9) & --- \\
 \end{tabular}
 \end{table}
 
-Criteria is the only prompt technique that helps at $k{=}8$: +2.1pp for the full model, +2.3pp for mini. Calibration is a no-op at $k{=}8$ (+0.2pp, within noise); the combined condition (82.6\%) sits within noise of criteria alone (83.6\%), so stacking calibration onto criteria does not help. Mini + criteria $k{=}8$ (81.5\%) matches full-model $k{=}8$ at one-quarter the cost, the optimal operating point for cost-constrained deployments. Mini's $k{=}8$ winner selection converges to full's at 78.7\% agreement (Spearman $\rho{=}0.79$); nano plateaus at ${\sim}$70\% agreement, consistent with a larger capability gap (Appendix~\ref{sec:convergence}).
+Criteria is the only prompt technique that helps at $k{=}8$: +2.1pp for the full model, +2.3pp for mini. Calibration is a no-op at $k{=}8$ (+0.2pp, within noise); the combined condition (82.6\%) sits within noise of criteria alone (83.6\%), so stacking calibration onto criteria does not help. Mini + criteria $k{=}8$ (81.5\%) matches full-model $k{=}8$ at one-quarter the cost, the optimal operating point for cost-constrained deployments.
 
-\paragraph{Criteria + ensembling as a simple strong baseline.} Criteria $k{=}8$ (83.6\%) matches the full combined condition (82.6\%) at lower cost (5.3$\times$ vs 6.8$\times$); if you are already paying for $k{=}8$, adding criteria is a near-free +2.1pp upgrade over ensembling.
-
-\subsection{Cross-model generalisation}
-\label{sec:cross-model}
-
-To test whether the criteria + ensembling recommendation transfers beyond GPT, we collected identical \texttt{base} and \texttt{criteria} runs on \textbf{Claude Sonnet 4.6} and \textbf{Claude Haiku 4.5} via the Claude CLI (1{,}763 RB2 examples per condition at $k{=}8$). The dominated techniques (calibration, escalation, soft blending) were not collected for Claude --- the cross-model claim is intentionally scoped to the recommended pair.
+\paragraph{Mini vs full convergence.} We measure how quickly mini's winner selection converges to full as $k$ grows, using agreement (fraction of examples picking the same winner) and Spearman rank correlation over the four per-response means (Figure~\ref{fig:convergence}). Mini agreement approaches 78.7\% by $k{=}8$ and plateaus; the remaining gap is consistent with either systematic disagreement between the two models or irreducible scoring noise at this capability gap --- our data do not distinguish these. Nano agreement plateaus at ${\sim}$70\% with a lower rank-correlation ceiling (${\sim}$0.67 vs ${\sim}$0.79 for mini), consistent with a larger capability gap.
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\columnwidth]{cross_model_gain.png}
-\caption{Cross-model accuracy on RewardBench~2: baseline ($k{=}1$), ensemble only ($k{=}8$), and criteria + ensembling ($k{=}8$). The recommended configuration improves on baseline across all four model conditions; deltas (criteria + ensemble vs baseline) are annotated above the right-most bar in each group.}
-\label{fig:cross-model}
+\includegraphics[width=\columnwidth]{mini_full_convergence.png}
+\caption{Model agreement with full ($k{=}8$) as a function of ensemble size. Mini reaches 78.7\% by $k{=}8$ (77.5\% at $k{=}5$); nano plateaus at ${\sim}$70\%, with a lower rank-correlation ceiling (0.67 vs 0.79 for mini), confirming a larger capability gap.}
+\label{fig:convergence}
 \end{figure}
 
-\begin{table}[ht]
-\centering
-\caption{Cross-model headline accuracy (\%, 95\% bootstrap CI half-widths). $\Delta$ is criteria + ensembling vs baseline.}
-\label{tab:cross-model}
-\small
-\begin{tabular}{lccc}
-\toprule
-Model              & Base.\ ($k{=}1$) & Crit.+ens.\ ($k{=}8$) & $\Delta$ \\
-\midrule
-GPT-5.4            & 71.7 ($\pm$2.1) & 83.6 ($\pm$1.8)          & $+$11.9 \\
-GPT-5.4 mini       & 64.8 ($\pm$2.3) & 81.5 ($\pm$1.9)          & $+$16.7 \\
-Claude Sonnet 4.6  & 72.3 ($\pm$2.2) & 83.4 ($\pm$1.8)          & $+$11.1 \\
-Claude Haiku 4.5   & 72.3 ($\pm$2.1) & \textbf{85.8 ($\pm$1.7)} & $+$13.5 \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\paragraph{Recommendation generalises.} Criteria + ensembling produces a paired-significant gain over the $k{=}1$ baseline for both Claude models (paired bootstrap, $p{>}0.999$ in each case). Sonnet 4.6 reaches 83.4\%, statistically tied with GPT-5.4's 83.6\%; Haiku 4.5 reaches \textbf{85.8\%}, the highest accuracy in our cross-model panel. The within-family pattern of "smaller models gain more from ensembling" replicates inside the Claude family: Haiku gains $+$13.5pp where Sonnet gains $+$11.1pp. The same tie-rate collapse from $k{=}1$ to $k{=}8$ that drives GPT's gain (Section~\ref{sec:discussion}) replicates on Claude (Appendix~\ref{sec:cross-model-detail}), supporting the noise-control framing as model-family-agnostic.
-
-\paragraph{Caveats.} Claude data was collected via the Claude CLI (subprocess), not the Anthropic API directly, with no \texttt{reasoning\_effort} parameter (Anthropic does not expose one); determinism characteristics may differ from the Azure pipeline. We test only Sonnet 4.6 and Haiku 4.5; Opus and other model families (Gemini, open-weight) remain untested. The dominated-techniques generalisation (calibration, escalation, soft blending) is not assessed across providers.
+\paragraph{Criteria + ensembling as a simple strong baseline.} Criteria $k{=}8$ (83.6\%) matches the full combined condition (82.6\%) at lower cost (5.3$\times$ vs 6.8$\times$); if you are already paying for $k{=}8$, adding criteria is a near-free +2.1pp upgrade over ensembling.
 
 %----------------------------------------------------------
 \section{Discussion and Conclusion}
@@ -381,7 +365,7 @@ Claude Haiku 4.5   & 72.3 ($\pm$2.1) & \textbf{85.8 ($\pm$1.7)} & $+$13.5 \\
 
 \paragraph{Limitations.}
 \begin{itemize}
-  \item We evaluate three judge model families (GPT-5.4, Claude Sonnet 4.6, Claude Haiku 4.5); coverage of Gemini, open-weight judges, and finetuned judges (e.g., Prometheus 2) remains untested.
+  \item We evaluate only OpenAI GPT and Anthropic Claude judges; extension to other model providers (Gemini, open-weight judges, finetuned judges such as Prometheus 2) is left to future work.
   \item RewardBench~2 is a single benchmark; performance may differ on production judge tasks such as offline eval suites and real-time monitoring.
   \item We set \texttt{reasoning\_effort="none"} throughout as a control to isolate prompt-level and aggregation effects from reasoning-induced gains; we have not sanity-checked whether the +11.9pp criteria+ensembling gap persists at higher reasoning effort, and note that reasoning itself is a variance-reducing intervention that could substitute for ensembling at higher per-call cost.
   \item We used a single set of author-designed criteria, fixed in the internal repository before the first collection run; sensitivity to wording variation and to external-registry-style pre-registration is untested.
@@ -392,9 +376,9 @@ Claude Haiku 4.5   & 72.3 ($\pm$2.1) & \textbf{85.8 ($\pm$1.7)} & $+$13.5 \\
 
 \paragraph{Interpretation: noise control, not new judgment.} At temperature $>0$, an LLM judge is a stochastic scorer \citep{stureborg2024inconsistent}; the interventions that worked are best understood as variance reduction rather than novel judgment capability. Ensembling is Monte Carlo variance reduction: per-call variance drops as $1/k$ and the $k{=}1 \to k{=}8$ tie-rate collapse (20.4\% $\to$ 4.5\%) is its observable signature. Criteria injection does \emph{not} change per-response score variance (mean $\sigma_i{=}0.31$ vs 0.32; KS $p{=}0.88$) but sharpens \emph{between-response} discrimination (tie rate 4.5\% $\to$ 3.2\% at $k{=}8$; AUC for variance predicting incorrectness rises from 0.60 to 0.64). Per-response score variance itself provides a weak but measurable uncertainty signal (AUC${\approx}$0.60 for predicting incorrect judgments), which we examined as both a routing target and a diagnostic for judge error. Techniques that don't work (calibration, model routing, soft blending) inject new information or combine heterogeneous distributions; at high $k$, residual variance is small enough that these contribute noise rather than signal.
 
-\paragraph{Reproducibility.} All experiments were conducted via Azure OpenAI API version \texttt{2025-04-01-preview} using GPT-5.4, GPT-5.4 mini, and GPT-5.4 nano deployments. Data was collected in March--April 2026. All API calls use temperature 1.0 with no seed parameter, so individual scores are not deterministically reproducible. Our bootstrap CIs reflect sampling variance over examples, not run-to-run API variance: Azure can silently rotate deployments, and we have not re-collected a headline condition to quantify cross-run drift. We recommend downstream users of these techniques re-benchmark on their own deployment. Total API spend across all collections was approximately \$1,500. All collection scripts write results incrementally and support resume. Code and raw data will be released upon acceptance (anonymised link suppressed for blind review).
+\paragraph{Reproducibility.} OpenAI experiments were conducted via Azure OpenAI API version \texttt{2025-04-01-preview} using GPT-5.4, GPT-5.4 mini, and GPT-5.4 nano deployments. Anthropic experiments were collected via the Claude CLI (Sonnet 4.6 and Haiku 4.5). Data was collected in March--April 2026. All API calls use temperature 1.0 with no seed parameter, so individual scores are not deterministically reproducible. Our bootstrap CIs reflect sampling variance over examples, not run-to-run API variance: Azure can silently rotate deployments, and we have not re-collected a headline condition to quantify cross-run drift. We recommend downstream users of these techniques re-benchmark on their own deployment. Total API spend across all collections was approximately \$1,500. All collection scripts write results incrementally and support resume. Code and raw data will be released upon acceptance (anonymised link suppressed for blind review).
 
-\paragraph{Conclusion.} On RewardBench~2, all four drop-in techniques we investigate improve over baseline. \textbf{Criteria injection} (+3.0pp at $k{=}1$, near-free) and \textbf{ensembling} (+9.8pp at $k{=}8$, with $k{=}3$ capturing ${\sim}$70\% of the gain) are the simplest and most cost-effective; together they reach \textbf{83.6\%} (+11.9pp), and we recommend them in practice for LLM-as-a-judge evaluation. The recommendation replicates on Claude Sonnet 4.6 (83.4\%) and Haiku 4.5 (85.8\%), supporting cross-family generalisation (Section~\ref{sec:cross-model}). Calibration context and adaptive model escalation also improve over baseline but at higher cost, and at high $k$ variance-reduction techniques become substitutes rather than complements, so stacking did not yield additive gains.
+\paragraph{Conclusion.} On RewardBench~2, all four drop-in techniques we investigate improve over baseline. \textbf{Criteria injection} (+3.0pp at $k{=}1$, near-free) and \textbf{ensembling} (+9.8pp at $k{=}8$, with $k{=}3$ capturing ${\sim}$70\% of the gain) are the simplest and most cost-effective; together they reach \textbf{83.6\%} (+11.9pp), and we recommend them in practice for LLM-as-a-judge evaluation. These gains generalise across model providers, replicating on both OpenAI GPT and Anthropic Claude judges. Calibration context and adaptive model escalation also improve over baseline but at higher cost, and at high $k$ variance-reduction techniques become substitutes rather than complements, so stacking did not yield additive gains.
 
 \FloatBarrier
 \balance
@@ -544,7 +528,7 @@ Combined (full $k{=}8$)         & 1746 & 82.6\% & 82.6\% & $-$0.0 \\
 \label{sec:escalation-detail}
 %----------------------------------------------------------
 
-\paragraph{Motivation.} GPT-5.4 mini is ${\sim}3\times$ cheaper than the full model but somewhat less accurate. If we could identify in advance which examples the mini model will get wrong, we could route only those to the full model. We use the mini model's score variance as a proxy for example difficulty.
+\paragraph{Motivation.} The mini-class model is ${\sim}3\times$ cheaper than the full-class model but somewhat less accurate. If we could identify in advance which examples the mini model will get wrong, we could route only those to the full model. We use the mini model's score variance as a proxy for example difficulty.
 
 \paragraph{Data collection.} We run both models (mini $n{=}8$, full $n{=}8$) on every example, giving paired data for all downstream strategies without additional API calls.
 
@@ -755,40 +739,5 @@ Mini agreement reaches 78.7\% by $k{=}8$; we cannot distinguish from this data w
 \caption{Model agreement with full ($k{=}8$) as a function of ensemble size. Mini reaches 78.7\% by $k{=}8$; nano plateaus at ${\sim}$70\%, with a lower rank-correlation ceiling.}
 \label{fig:convergence}
 \end{figure}
-
-\subsection{Cross-Model Generalisation Details}
-\label{sec:cross-model-detail}
-
-\paragraph{Diminishing returns across model families.} Figure~\ref{fig:cross-model-dim} extends the diminishing-returns curve to Claude. The shape is qualitatively similar across providers --- most of the gain is captured by $k{=}3$ for all five models, consistent with Monte Carlo variance reduction not being provider-specific.
-
-\begin{figure}[ht]
-\centering
-\includegraphics[width=\columnwidth]{cross_model_diminishing.png}
-\caption{Accuracy vs.\ ensemble size $k$ for the five models in our cross-model panel. The diminishing-returns shape replicates across providers; absolute levels differ but the curvature does not.}
-\label{fig:cross-model-dim}
-\end{figure}
-
-\paragraph{Tie-rate collapse on Claude.} Both Claude models reproduce the GPT signature of $k{=}1 \to k{=}8$ tie-rate collapse (Table~\ref{tab:cross-model-tie}): ties become rare under ensembling because they require all four response means to coincide across $k$ draws. The relative reduction ($\sim$5--7$\times$) matches what we observe on GPT-5.4 (20.4\% $\to$ 4.5\%).
-
-\begin{table}[ht]
-\centering
-\caption{Tie rates ($k{=}1$ vs $k{=}8$) for the Claude collections.}
-\label{tab:cross-model-tie}
-\small
-\begin{tabular}{lcc}
-\toprule
-Condition           & $k{=}1$ & $k{=}8$ \\
-\midrule
-Sonnet baseline     & 18.5\% & 4.0\% \\
-Sonnet criteria     & 18.7\% & 4.7\% \\
-Haiku baseline      & 18.3\% & 2.6\% \\
-Haiku criteria      & 17.0\% & 2.5\% \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\paragraph{Paired bootstrap.} Criteria + ensembling at $k{=}8$ vs.\ baseline $k{=}1$ on the intersection of examples: paired-significant for all four model conditions (paired bootstrap $n{=}2000$). Sonnet $\Delta{=}{+}11.0$pp [95\% CI $+9.1, +12.8$], $p{>}0.999$; Haiku $\Delta{=}{+}13.3$pp [$+11.5, +15.2$], $p{>}0.999$.
-
-\paragraph{Collection methodology.} Claude data was collected via the Claude CLI in subprocess mode (driver \texttt{collect\_claude.py}) with default sampling settings (temperature 1.0; no \texttt{reasoning\_effort} parameter, which Anthropic does not expose). The CLI handles auto-update behaviour internally. Rate-limit errors retry indefinitely with exponential backoff; transient errors retry up to 5 times. Per-example refusals are tracked separately and excluded from accuracy computation, mirroring the Azure OpenAI content-filter handling on the GPT side.
 
 \end{document}

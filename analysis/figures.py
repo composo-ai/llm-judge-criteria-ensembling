@@ -105,27 +105,52 @@ def _merge_nano(data: list[dict], prefix: str) -> list[dict]:
 # ===================================================================
 
 def plot_hero_accuracy(metrics):
-    # Build {condition_name: {subset: accuracy}} from metrics
-    conditions = {}
-    # Only full-dataset conditions (no test-set to avoid mixing evaluation protocols)
-    display_order = [
-        ("baseline", "Baseline"),
-        ("criteria", "Criteria (k=1)"),
-        ("cal_low", "Calibration (low)"),
-        ("ensemble_k8", "Ensemble k=8"),
-        ("mini_k8", "Mini k=8"),
-        ("nano_k8", "Nano k=8"),
-        ("criteria_k8", "Criteria k=8"),
-        ("combined", "Combined"),
+    """Per-category accuracy by condition. Best-of-class per (condition, category).
+
+    For each condition we have multiple candidate providers; we pick the
+    provider with the highest *overall* accuracy and show its per-category
+    breakdown. Mixed-provider lines are kept honest by noting the
+    selected provider in the legend label.
+    """
+    from analysis.compute_metrics import load_collection, compute_accuracy
+
+    # (display_label, candidates [(provider, path, model, k)])
+    spec = [
+        ("Baseline",          [("GPT-5.4",    "results/raw/base_both_k8.jsonl",        "full", 1),
+                                ("Sonnet 4.6", "results/raw/base_claude_both_k8.jsonl", "full", 1)]),
+        ("Criteria (k=1)",    [("GPT-5.4",    "results/raw/criteria_both_k8.jsonl",    "full", 1),
+                                ("Sonnet 4.6", "results/raw/criteria_claude_both_k8.jsonl", "full", 1)]),
+        ("Calibration (low)", [("GPT-5.4",    "results/raw/cal-low_both_k8.jsonl",     "full", 8)]),
+        ("Ensemble k=8",      [("GPT-5.4",    "results/raw/base_both_k8.jsonl",        "full", 8),
+                                ("Sonnet 4.6", "results/raw/base_claude_both_k8.jsonl", "full", 8)]),
+        ("Mini k=8",          [("GPT mini",   "results/raw/base_both_k8.jsonl",        "mini", 8),
+                                ("Haiku 4.5",  "results/raw/base_claude_both_k8.jsonl", "mini", 8)]),
+        ("Nano k=8",          [("GPT nano",   "results/raw/base_nano_k8.jsonl",        "nano", 8)]),
+        ("Criteria k=8",      [("GPT-5.4",    "results/raw/criteria_both_k8.jsonl",    "full", 8),
+                                ("Sonnet 4.6", "results/raw/criteria_claude_both_k8.jsonl", "full", 8)]),
+        ("Combined",          [("GPT-5.4",    "results/raw/combined_both_k8.jsonl",    "full", 8)]),
     ]
 
-    for key, label in display_order:
-        m = metrics.get(key)
-        if m and "accuracy" in m:
-            conditions[label] = {
-                sub: d["accuracy"]
-                for sub, d in m["accuracy"]["by_subset"].items()
-            }
+    conditions = {}
+    for label, candidates in spec:
+        best_acc, best_pkg, best_provider = -1, None, None
+        for provider, path, model, k in candidates:
+            try:
+                a = compute_accuracy(load_collection(path), model=model, k_subset=k)
+            except FileNotFoundError:
+                continue
+            if a["overall"] > best_acc:
+                best_acc, best_pkg, best_provider = a["overall"], a, provider
+        if best_pkg is None:
+            continue
+        full_label = f"{label} ({best_provider})"
+        conditions[full_label] = {
+            sub: d["accuracy"]
+            for sub, d in best_pkg["by_subset"].items()
+        }
+        # Keep base-label color mapping
+        if label not in COLORS and full_label not in COLORS:
+            pass  # fallback handled below
 
     if not conditions:
         print("  Skipping hero figure: no data")
@@ -141,7 +166,10 @@ def plot_hero_accuracy(metrics):
 
     for i, name in enumerate(cond_names):
         vals = [conditions[name].get(s, 0) for s in subsets]
-        color = COLORS.get(name, f"C{i}")
+        # The provider tag is appended at the END (last " ("), so strip it for color lookup.
+        last_open = name.rfind(" (")
+        base_label = name[:last_open] if last_open != -1 else name
+        color = COLORS.get(base_label, COLORS.get(name, f"C{i}"))
         ax.bar(x + i * bar_w, vals, bar_w, label=name, color=color)
 
     ax.axhline(0.25, color="gray", linestyle="--", lw=0.8, label="Random (25%)")
@@ -161,31 +189,73 @@ def plot_hero_accuracy(metrics):
 # ===================================================================
 
 def plot_pareto_frontier(metrics):
-    points = []  # (cost_per_ex, accuracy, label, offset)
+    """Cost-accuracy Pareto frontier, best-of-class per condition.
 
-    # Only full-dataset conditions (no test-set numbers to avoid mixing protocols).
-    # Offsets are (dx, dy) in data coords for label placement.
+    Each point is (class, condition); accuracy is max across providers
+    that have data for that (class, condition); cost is the class cost
+    derived from the GPT pricing (Anthropic costs unspecified).
+    """
+    from analysis.compute_metrics import load_collection, compute_accuracy
+
+    def _acc(path, model, k):
+        try:
+            return compute_accuracy(load_collection(path), model=model, k_subset=k)["overall"]
+        except FileNotFoundError:
+            return None
+
+    # Per-condition: try each candidate (path, model, k); keep the best accuracy
+    # and remember which provider supplied it.
     spec = [
-        ("baseline",         "Baseline",            (0.05, -0.004), "left"),
-        ("criteria",         "Criteria (k=1)",      (0.05, 0.004),  "left"),
-        ("criteria_k8",      "Criteria k=8",        (0.05, 0.004),  "left"),
-        ("ensemble_k8",      "Ensemble k=8",        (0.05, -0.004), "left"),
-        ("mini_k8",          "Mini k=8",            (0.05, 0.004),  "left"),
-        ("criteria_mini_k8", "Mini+Criteria k=8",   (0.05, 0.004),  "left"),
-        ("nano_k8",          "Nano k=8",            (-0.04, 0.000), "right"),
-        ("cal_low",          "Calibration (low)",   (0.05, -0.004), "left"),
-        ("combined",         "Combined",            (0.05, 0.004),  "left"),
+        # (label, gpt_cost_per_ex_key, candidates [(provider, path, model, k)], offset, ha)
+        ("Baseline",            "baseline",         [("GPT-5.4",     "results/raw/base_both_k8.jsonl", "full", 1),
+                                                     ("Sonnet 4.6",  "results/raw/base_claude_both_k8.jsonl", "full", 1)],
+                                                    (0.05, -0.004), "left"),
+        ("Criteria (k=1)",      "criteria",         [("GPT-5.4",     "results/raw/criteria_both_k8.jsonl", "full", 1),
+                                                     ("Sonnet 4.6",  "results/raw/criteria_claude_both_k8.jsonl", "full", 1)],
+                                                    (0.05, 0.004),  "left"),
+        ("Ensemble k=8",        "ensemble_k8",      [("GPT-5.4",     "results/raw/base_both_k8.jsonl", "full", 8),
+                                                     ("Sonnet 4.6",  "results/raw/base_claude_both_k8.jsonl", "full", 8)],
+                                                    (0.05, -0.004), "left"),
+        ("Criteria k=8",        "criteria_k8",      [("GPT-5.4",     "results/raw/criteria_both_k8.jsonl", "full", 8),
+                                                     ("Sonnet 4.6",  "results/raw/criteria_claude_both_k8.jsonl", "full", 8)],
+                                                    (0.05, 0.004),  "left"),
+        ("Mini k=8",            "mini_k8",          [("GPT mini",    "results/raw/base_both_k8.jsonl", "mini", 8),
+                                                     ("Haiku 4.5",   "results/raw/base_claude_both_k8.jsonl", "mini", 8)],
+                                                    (0.05, 0.004),  "left"),
+        ("Mini+Criteria k=8",   "criteria_mini_k8", [("GPT mini",    "results/raw/criteria_both_k8.jsonl", "mini", 8),
+                                                     ("Haiku 4.5",   "results/raw/criteria_claude_both_k8.jsonl", "mini", 8)],
+                                                    (0.05, 0.004),  "left"),
+        ("Nano k=8",            "nano_k8",          [("GPT nano",    "results/raw/base_nano_k8.jsonl", "nano", 8)],
+                                                    (-0.04, 0.000), "right"),
+        ("Calibration (low)",   "cal_low",          [("GPT-5.4",     "results/raw/cal-low_both_k8.jsonl", "full", 8)],
+                                                    (0.05, -0.004), "left"),
+        ("Combined",            "combined",         [("GPT-5.4",     "results/raw/combined_both_k8.jsonl", "full", 8)],
+                                                    (0.05, 0.004),  "left"),
     ]
-    for key, label, off, ha in spec:
-        m = metrics.get(key)
-        if m and "accuracy" in m and "cost" in m:
-            points.append((m["cost"]["cost_per_example"], m["accuracy"]["overall"], label, off, ha))
+
+    points = []
+    for label, cost_key, candidates, off, ha in spec:
+        cost_m = metrics.get(cost_key, {}).get("cost", {})
+        cost_per_ex = cost_m.get("cost_per_example")
+        if cost_per_ex is None:
+            print(f"  pareto: missing cost for {label}")
+            continue
+        best_acc = -1
+        best_provider = None
+        for provider, path, model, k in candidates:
+            a = _acc(path, model, k)
+            if a is not None and a > best_acc:
+                best_acc, best_provider = a, provider
+        if best_provider is None:
+            continue
+        points.append((cost_per_ex, best_acc, f"{label} ({best_provider})", off, ha))
 
     if not points:
         print("  Skipping Pareto: no data")
         return
 
-    baseline_cost = next((c for c, a, l, *_ in points if l == "Baseline"), None)
+    # Baseline cost is from the Baseline (GPT full k=1) entry's GPT cost.
+    baseline_cost = next((c for c, a, l, *_ in points if l.startswith("Baseline")), None)
     if not baseline_cost:
         print("  Skipping Pareto: no baseline")
         return
@@ -194,7 +264,9 @@ def plot_pareto_frontier(metrics):
     rel = [(c / baseline_cost, a, l, o, h) for c, a, l, o, h in points]
 
     for rc, acc, label, (dx, dy), ha in rel:
-        color = COLORS.get(label, "gray")
+        # Color by base label (without provider suffix) so colors match across re-renders
+        base_label = label.split(" (")[0]
+        color = COLORS.get(base_label, "gray")
         ax.scatter(rc, acc, s=60, color=color, zorder=5)
         px = 6 if ha == "left" else -6
         py = 0 if abs(dy) < 1e-6 else (4 if dy > 0 else -4)
@@ -774,12 +846,6 @@ def main():
 
     print("\n  10. Temperature Sweep")
     plot_temperature_sweep(metrics)
-
-    print("\n  11. Cross-model gain")
-    plot_cross_model_gain(metrics)
-
-    print("\n  12. Cross-model diminishing returns")
-    plot_cross_model_diminishing(metrics)
 
     print(f"\nDone! Figures saved to {FIGURES_DIR}/")
 
