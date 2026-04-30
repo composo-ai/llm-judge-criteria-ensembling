@@ -229,6 +229,18 @@ def plot_pareto_frontier(metrics):
                                                                 7, 0,   "left",  "#949494"),
     ]
 
+    # Provider cost multipliers vs the corresponding OpenAI tier at the
+    # same condition (input rate × output rate weighted by typical token mix).
+    # Sonnet input is 1.20× / output 1.00× of GPT-5.4 -> ~1.02× cost at k=8,
+    # ~1.08× at k=1 where input weighs more.
+    # Haiku input is 1.33× / output 1.11× of GPT-5.4 mini -> ~1.13× cost.
+    cost_mult = {
+        ("Sonnet 4.6", 1): 1.085,
+        ("Sonnet 4.6", 8): 1.018,
+        ("Haiku 4.5", 8): 1.133,
+        # Anything else (GPT-5.4 / GPT mini / GPT nano / Sonnet for k!=1,8 / Haiku k=1) stays 1.0
+    }
+
     points = []
     baseline_cost = None
     for label, cost_key, candidates, dx, dy, ha, color in spec:
@@ -240,17 +252,19 @@ def plot_pareto_frontier(metrics):
         if cost_key == "baseline":
             baseline_cost = cost_per_ex
         best_acc = -1
-        best_provider = None
+        best_provider, best_k = None, None
         for provider, path, model, k in candidates:
             a = _acc(path, model, k)
             if a is not None and a > best_acc:
-                best_acc, best_provider = a, provider
+                best_acc, best_provider, best_k = a, provider, k
         if best_provider is None:
             continue
+        # Apply provider-specific cost multiplier on top of GPT cost
+        adjusted_cost = cost_per_ex * cost_mult.get((best_provider, best_k), 1.0)
         # Drop the provider tag from the displayed label — only the
         # class+technique is shown on the chart. Provider attribution lives
         # in Table 4.
-        points.append((cost_per_ex, best_acc, label, dx, dy, ha, color))
+        points.append((adjusted_cost, best_acc, label, dx, dy, ha, color))
 
     if not points or baseline_cost is None:
         print("  Skipping Pareto: no data")

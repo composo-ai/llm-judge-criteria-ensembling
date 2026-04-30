@@ -148,7 +148,7 @@ When running both a mini and a full model (Sections~\ref{sec:escalation}--\ref{s
 \subsection{Models and Costs}
 \label{sec:models}
 
-We evaluate five models across two providers (OpenAI and Anthropic), grouped into three capability \emph{classes} --- \emph{full}, \emph{mini}, and \emph{nano} --- defined by relative compute cost within their provider. Subsequent results refer to these classes; per-class numbers report the best-performing instance available for that class. Table~\ref{tab:models} lists each model, its class, and its per-token API pricing.
+We evaluate five models across two providers (OpenAI and Anthropic), grouped into three capability \emph{classes} --- \emph{full}, \emph{mini}, and \emph{nano} --- defined by assumed relative compute cost within their provider. Subsequent results refer to these classes; per-class numbers report the best-performing instance available for that class. Table~\ref{tab:models} lists each model, its class, and its per-token API pricing.
 
 \begin{table}[ht]
 \centering
@@ -159,11 +159,11 @@ We evaluate five models across two providers (OpenAI and Anthropic), grouped int
 \toprule
 Model              & Class & Input \$/M & Output \$/M \\
 \midrule
+Claude Sonnet 4.6  & full  & 3.00 & 15.00 \\
 GPT-5.4            & full  & 2.50 & 15.00 \\
+Claude Haiku 4.5   & mini  & 1.00 & 5.00  \\
 GPT-5.4 mini       & mini  & 0.75 & 4.50  \\
 GPT-5.4 nano       & nano  & 0.20 & 1.25  \\
-Claude Sonnet 4.6  & full  & ---  & ---  \\
-Claude Haiku 4.5   & mini  & ---  & ---  \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -271,17 +271,17 @@ Condition & Model & $N$ & Overall (95\% CI) & Fact. & Focus & Math & P-IF & Safe
 \multicolumn{10}{l}{\textit{(a) Recommended techniques}} \\
 \midrule
 Baseline (full $k{=}1$)   & GPT-5.4    & 1729 & 71.7\% ($\pm$2.1) & 76.4 & 70.1 & 61.2 & 34.0 & 87.3 & 1.0$\times$ \\
-                          & Sonnet 4.6 & 1737 & 72.3\% ($\pm$2.2) & 71.6 & 72.1 & 75.3 & 38.1 & 84.2 & 1.0$\times$ \\
+                          & Sonnet 4.6 & 1737 & 72.3\% ($\pm$2.2) & 71.6 & 72.1 & 75.3 & 38.1 & 84.2 & 1.1$\times$ \\
 Criteria (full $k{=}1$)   & GPT-5.4    & 1738 & 74.7\% ($\pm$2.1) & 77.9 & 72.3 & 73.2 & 32.1 & 90.6 & 1.1$\times$ \\
-                          & Sonnet 4.6 & 1743 & 74.1\% ($\pm$2.1) & 75.7 & 74.5 & 68.1 & 44.5 & 84.7 & 1.1$\times$ \\
+                          & Sonnet 4.6 & 1743 & 74.1\% ($\pm$2.1) & 75.7 & 74.5 & 68.1 & 44.5 & 84.7 & 1.2$\times$ \\
 Ensemble (full $k{=}8$)   & GPT-5.4    & 1730 & 81.5\% ($\pm$1.8) & 86.7 & 81.8 & 74.9 & 44.7 & 92.1 & 5.0$\times$ \\
-                          & Sonnet 4.6 & 1744 & 82.7\% ($\pm$1.8) & 84.7 & 83.2 & 89.0 & 52.9 & 88.0 & 5.0$\times$ \\
+                          & Sonnet 4.6 & 1744 & 82.7\% ($\pm$1.8) & 84.7 & 83.2 & 89.0 & 52.9 & 88.0 & 5.1$\times$ \\
 \textbf{Criteria (full $k{=}8$)} & GPT-5.4 & 1741 & \textbf{83.6\%} ($\pm$1.7) & \textbf{89.1} & \textbf{82.8} & \textbf{79.2} & 48.8 & \textbf{93.2} & 5.3$\times$ \\
-                          & Sonnet 4.6 & 1751 & 83.4\% ($\pm$1.8) & 87.1 & 82.8 & 75.3 & 59.6 & 91.9 & 5.3$\times$ \\
+                          & Sonnet 4.6 & 1751 & 83.4\% ($\pm$1.8) & 87.1 & 82.8 & 75.3 & 59.6 & 91.9 & 5.4$\times$ \\
 Mini model $k{=}8$        & GPT mini   & 1730 & 79.2\% ($\pm$2.0) & 83.3 & 80.2 & 68.3 & 40.3 & 92.8 & 1.2$\times$ \\
-                          & Haiku 4.5  & 1761 & 84.8\% ($\pm$1.7) & 82.5 & 83.0 & 90.2 & 64.4 & 94.4 & 1.2$\times$ \\
+                          & Haiku 4.5  & 1761 & 84.8\% ($\pm$1.7) & 82.5 & 83.0 & 90.2 & 64.4 & 94.4 & 1.3$\times$ \\
 Criteria (mini $k{=}8$)   & GPT mini   & 1742 & 81.5\% ($\pm$1.9) & 85.5 & 82.2 & 72.7 & 41.2 & 94.9 & 1.2$\times$ \\
-                          & Haiku 4.5  & 1763 & \textbf{85.8\%} ($\pm$1.7) & 86.1 & 82.2 & 89.6 & \textbf{68.1} & 94.0 & 1.2$\times$ \\
+                          & Haiku 4.5  & 1763 & \textbf{85.8\%} ($\pm$1.7) & 86.1 & 82.2 & 89.6 & \textbf{68.1} & 94.0 & 1.3$\times$ \\
 Nano model $k{=}8$        & GPT nano   & 1705 & 71.4\% ($\pm$2.1) & 67.9 & 74.5 & 61.2 & 42.4 & 87.6 & 0.4$\times$ \\
 \midrule
 \multicolumn{10}{l}{\textit{(b) Investigated techniques (GPT only)}} \\
