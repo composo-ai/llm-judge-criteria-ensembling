@@ -277,8 +277,8 @@ def plot_pareto_frontier(metrics):
         ax.plot(fx, fy, "k--", alpha=0.3, lw=1)
 
     ax.set_xscale("log")
-    ax.set_xlim(0.3, 12)
-    ax.set_xticks([0.5, 1, 2, 5, 10])
+    ax.set_xlim(0.25, 35)
+    ax.set_xticks([0.5, 1, 2, 5, 10, 20])
     ax.set_xticks([], minor=True)
     ax.set_xlabel("Cost (x baseline)")
     ax.set_ylabel("Accuracy")
