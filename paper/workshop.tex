@@ -300,7 +300,7 @@ Variance-informed (budget $\leq$2, test)$^\ddagger$ & GPT-5.4 & ${\sim}$343 & 74
 \begin{figure*}[t]
 \centering
 \includegraphics[width=\textwidth]{hero_accuracy.png}
-\caption{Accuracy by condition and category. Each bar shows the best-performing provider for that class+condition (legend lists the provider per condition). $k{=}8$ + criteria (mini) reaches the highest overall accuracy (85.8\%, supplied by Haiku 4.5); $k{=}8$ + criteria (full) at 83.6\% matches $k{=}8$ + combined (full) at 82.6\% at lower cost. Precise IF remains the hardest category across all conditions.}
+\caption{Accuracy by condition and category. Each bar shows the best-performing provider for that class+condition; per-row provider attribution is in Table~\ref{tab:results-main}. $k{=}8$ + criteria (mini) reaches the highest overall accuracy (85.8\%); $k{=}8$ + criteria (full) at 83.6\% matches $k{=}8$ + combined (full) at 82.6\% at lower cost. Precise IF remains the hardest category across all conditions.}
 \label{fig:hero-accuracy}
 \end{figure*}
 
@@ -354,7 +354,7 @@ Criteria is the only prompt technique that helps at $k{=}8$: +2.1pp for the full
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{mini_full_convergence.png}
-\caption{Model agreement with full ($k{=}8$) as a function of ensemble size. Mini reaches 78.7\% by $k{=}8$ (77.5\% at $k{=}5$); nano plateaus at ${\sim}$70\%, with a lower rank-correlation ceiling (0.67 vs 0.79 for mini), confirming a larger capability gap.}
+\caption{Model agreement with full ($k{=}8$) as a function of ensemble size, on the OpenAI GPT-5.4 family. Mini reaches 78.7\% by $k{=}8$ (77.5\% at $k{=}5$); nano plateaus at ${\sim}$70\%, with a lower rank-correlation ceiling (0.67 vs 0.79 for mini), confirming a larger capability gap.}
 \label{fig:convergence}
 \end{figure}
 
@@ -701,7 +701,7 @@ $k$ & Full & Mini & Nano \\
 \subsection{Temperature Sensitivity}
 \label{sec:temperature}
 
-We sweep temperature across \{0.0, 0.3, 0.7, 1.0\} for the base prompt with the full model. At $k{=}1$, accuracy is stable across temperatures (71--73\%, CIs overlapping). At $k{=}8$, ensembling helps at all temperatures, but the gain increases with temperature: from +4.6pp at temperature~0 (72.5\% $\to$ 77.1\%) to +9.8pp at temperature~1.0 (71.7\% $\to$ 81.5\%). Even at temperature~0 there is a significant +4.6pp gap between $k{=}1$ (72.5\%) and $k{=}8$ (77.1\%), with non-overlapping confidence intervals --- \texttt{temperature=0} does not produce deterministic outputs in practice, likely due to floating-point non-determinism in GPU inference and the absence of a \texttt{seed} parameter. This is a useful finding for practitioners: even deployments that assume deterministic scoring at temperature~0 can benefit from ensembling.
+We sweep temperature across \{0.0, 0.3, 0.7, 1.0\} for the base prompt with the full model (Figure~\ref{fig:temperature}). At $k{=}1$, accuracy is stable across temperatures (71--73\%, CIs overlapping). At $k{=}8$, ensembling helps at all temperatures, but the gain increases with temperature: from +4.6pp at temperature~0 (72.5\% $\to$ 77.1\%) to +9.8pp at temperature~1.0 (71.7\% $\to$ 81.5\%). Even at temperature~0 there is a significant +4.6pp gap between $k{=}1$ (72.5\%) and $k{=}8$ (77.1\%), with non-overlapping confidence intervals --- \texttt{temperature=0} does not produce deterministic outputs in practice, likely due to floating-point non-determinism in GPU inference and the absence of a \texttt{seed} parameter. This is a useful finding for practitioners: even deployments that assume deterministic scoring at temperature~0 can benefit from ensembling.
 
 \begin{figure}[t]
 \centering
@@ -733,13 +733,6 @@ $k$ & Agreement & Rank corr ($\rho$) \\
 \end{tabular}
 \end{table}
 
-Mini agreement reaches 78.7\% by $k{=}8$; we cannot distinguish from this data whether the ceiling reflects systematic disagreement or residual noise at a capability gap. Nano shows a qualitatively similar pattern but with a lower ceiling: agreement rises from ${\sim}$50\% at $k{=}1$ to ${\sim}$70\% at $k{=}8$, with rank correlation plateauing around 0.67 (vs 0.79 for mini).
-
-\begin{figure}[ht]
-\centering
-\includegraphics[width=\columnwidth]{mini_full_convergence.png}
-\caption{Model agreement with full ($k{=}8$) as a function of ensemble size. Mini reaches 78.7\% by $k{=}8$; nano plateaus at ${\sim}$70\%, with a lower rank-correlation ceiling.}
-\label{fig:convergence}
-\end{figure}
+Mini agreement reaches 78.7\% by $k{=}8$; we cannot distinguish from this data whether the ceiling reflects systematic disagreement or residual noise at a capability gap. Nano shows a qualitatively similar pattern but with a lower ceiling: agreement rises from ${\sim}$50\% at $k{=}1$ to ${\sim}$70\% at $k{=}8$, with rank correlation plateauing around 0.67 (vs 0.79 for mini). Visualisation is in Figure~\ref{fig:convergence} (main paper).
 
 \end{document}
