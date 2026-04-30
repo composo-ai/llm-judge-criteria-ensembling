@@ -617,17 +617,19 @@ Table~\ref{tab:escalation-summary} compares escalation strategies against the $k
 
 \begin{table}[ht]
 \centering
-\caption{Escalation strategy comparison. The test-set rows are the honest headline numbers; the ``full dataset (in-sample)'' soft-blend row is the tuned upper bound and should \emph{not} be compared on equal footing with the other rows.}
+\caption{Escalation strategy comparison. Test-set rows are the honest headline numbers; the in-sample soft-blend row is a tuned upper bound and should \emph{not} be compared on equal footing with the others.}
 \label{tab:escalation-summary}
+\small
+\setlength{\tabcolsep}{4pt}
 \begin{tabular}{lcc}
 \toprule
-Strategy & Acc.\ & vs $k{=}1$ full \\
+Strategy & Acc.\ & vs $k{=}1$ \\
 \midrule
-$k{=}1$ full (baseline)            & 71.7\% & 1.0$\times$ \\
-Full $k{=}8$                       & 81.5\% & 5.0$\times$ \\
-Soft blend (full dataset, tuned)$^\dagger$ & 83.2\% & 6.1$\times$ \\
-Soft blend (test set)              & 80.2\% & 6.1$\times$ \\
-Variance-informed (budget $\leq$2, test)  & 74.9\% & 1.6$\times$ \\
+$k{=}1$ full (baseline)        & 71.7\% & 1.0$\times$ \\
+Full $k{=}8$                   & 81.5\% & 5.0$\times$ \\
+Soft blend (in-sample)$^\dagger$ & 83.2\% & 6.1$\times$ \\
+Soft blend (test)              & 80.2\% & 6.1$\times$ \\
+Var-informed ($\bar{n}_{\text{full}}{\leq}2$, test) & 74.9\% & 1.6$\times$ \\
 \bottomrule
 \end{tabular}
 
