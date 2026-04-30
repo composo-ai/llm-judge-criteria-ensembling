@@ -114,43 +114,40 @@ def plot_hero_accuracy(metrics):
     """
     from analysis.compute_metrics import load_collection, compute_accuracy
 
-    # (display_label, candidates [(provider, path, model, k)])
+    # (display_label, candidates [(provider, path, model, k)], color)
     spec = [
-        ("Baseline",          [("GPT-5.4",    "results/raw/base_both_k8.jsonl",        "full", 1),
-                                ("Sonnet 4.6", "results/raw/base_claude_both_k8.jsonl", "full", 1)]),
-        ("Criteria (k=1)",    [("GPT-5.4",    "results/raw/criteria_both_k8.jsonl",    "full", 1),
-                                ("Sonnet 4.6", "results/raw/criteria_claude_both_k8.jsonl", "full", 1)]),
-        ("Calibration (low)", [("GPT-5.4",    "results/raw/cal-low_both_k8.jsonl",     "full", 8)]),
-        ("Ensemble k=8",      [("GPT-5.4",    "results/raw/base_both_k8.jsonl",        "full", 8),
-                                ("Sonnet 4.6", "results/raw/base_claude_both_k8.jsonl", "full", 8)]),
-        ("Mini k=8",          [("GPT mini",   "results/raw/base_both_k8.jsonl",        "mini", 8),
-                                ("Haiku 4.5",  "results/raw/base_claude_both_k8.jsonl", "mini", 8)]),
-        ("Nano k=8",          [("GPT nano",   "results/raw/base_nano_k8.jsonl",        "nano", 8)]),
-        ("Criteria k=8",      [("GPT-5.4",    "results/raw/criteria_both_k8.jsonl",    "full", 8),
-                                ("Sonnet 4.6", "results/raw/criteria_claude_both_k8.jsonl", "full", 8)]),
-        ("Combined",          [("GPT-5.4",    "results/raw/combined_both_k8.jsonl",    "full", 8)]),
+        ("$k{=}1$ (full)",                 [("GPT-5.4",    "results/raw/base_both_k8.jsonl",        "full", 1),
+                                             ("Sonnet 4.6", "results/raw/base_claude_both_k8.jsonl", "full", 1)],     "#0173b2"),
+        ("$k{=}1$ + criteria (full)",      [("GPT-5.4",    "results/raw/criteria_both_k8.jsonl",    "full", 1),
+                                             ("Sonnet 4.6", "results/raw/criteria_claude_both_k8.jsonl", "full", 1)], "#029e73"),
+        ("$k{=}8$ + calibration (full)",   [("GPT-5.4",    "results/raw/cal-low_both_k8.jsonl",     "full", 8)],       "#fbafe4"),
+        ("$k{=}8$ (full)",                 [("GPT-5.4",    "results/raw/base_both_k8.jsonl",        "full", 8),
+                                             ("Sonnet 4.6", "results/raw/base_claude_both_k8.jsonl", "full", 8)],     "#de8f05"),
+        ("$k{=}8$ (mini)",                 [("GPT mini",   "results/raw/base_both_k8.jsonl",        "mini", 8),
+                                             ("Haiku 4.5",  "results/raw/base_claude_both_k8.jsonl", "mini", 8)],     "#ca9161"),
+        ("$k{=}8$ (nano)",                 [("GPT nano",   "results/raw/base_nano_k8.jsonl",        "nano", 8)],       "#56b4e9"),
+        ("$k{=}8$ + criteria (full)",      [("GPT-5.4",    "results/raw/criteria_both_k8.jsonl",    "full", 8),
+                                             ("Sonnet 4.6", "results/raw/criteria_claude_both_k8.jsonl", "full", 8)], "#d55e00"),
+        ("$k{=}8$ + criteria (mini)",      [("GPT mini",   "results/raw/criteria_both_k8.jsonl",    "mini", 8),
+                                             ("Haiku 4.5",  "results/raw/criteria_claude_both_k8.jsonl", "mini", 8)], "#cc78bc"),
+        ("$k{=}8$ + combined (full)",      [("GPT-5.4",    "results/raw/combined_both_k8.jsonl",    "full", 8)],       "#949494"),
     ]
 
     conditions = {}
-    for label, candidates in spec:
-        best_acc, best_pkg, best_provider = -1, None, None
+    color_map = {}
+    for label, candidates, color in spec:
+        best_acc, best_pkg = -1, None
         for provider, path, model, k in candidates:
             try:
                 a = compute_accuracy(load_collection(path), model=model, k_subset=k)
             except FileNotFoundError:
                 continue
             if a["overall"] > best_acc:
-                best_acc, best_pkg, best_provider = a["overall"], a, provider
+                best_acc, best_pkg = a["overall"], a
         if best_pkg is None:
             continue
-        full_label = f"{label} ({best_provider})"
-        conditions[full_label] = {
-            sub: d["accuracy"]
-            for sub, d in best_pkg["by_subset"].items()
-        }
-        # Keep base-label color mapping
-        if label not in COLORS and full_label not in COLORS:
-            pass  # fallback handled below
+        conditions[label] = {sub: d["accuracy"] for sub, d in best_pkg["by_subset"].items()}
+        color_map[label] = color
 
     if not conditions:
         print("  Skipping hero figure: no data")
@@ -166,10 +163,7 @@ def plot_hero_accuracy(metrics):
 
     for i, name in enumerate(cond_names):
         vals = [conditions[name].get(s, 0) for s in subsets]
-        # The provider tag is appended at the END (last " ("), so strip it for color lookup.
-        last_open = name.rfind(" (")
-        base_label = name[:last_open] if last_open != -1 else name
-        color = COLORS.get(base_label, COLORS.get(name, f"C{i}"))
+        color = color_map.get(name, f"C{i}")
         ax.bar(x + i * bar_w, vals, bar_w, label=name, color=color)
 
     ax.axhline(0.25, color="gray", linestyle="--", lw=0.8, label="Random (25%)")
@@ -208,40 +202,43 @@ def plot_pareto_frontier(metrics):
     # Placement: dx_pts and dy_pts are pixel offsets in the figure; ha is the
     # text horizontal alignment relative to the anchor point.
     spec = [
-        # (label, gpt_cost_per_ex_key, candidates, dx_pts, dy_pts, ha)
-        ("Baseline",            "baseline",         [("GPT-5.4",     "results/raw/base_both_k8.jsonl", "full", 1),
-                                                     ("Sonnet 4.6",  "results/raw/base_claude_both_k8.jsonl", "full", 1)],
-                                                    7, -8, "left"),
-        ("Criteria (k=1)",      "criteria",         [("GPT-5.4",     "results/raw/criteria_both_k8.jsonl", "full", 1),
-                                                     ("Sonnet 4.6",  "results/raw/criteria_claude_both_k8.jsonl", "full", 1)],
-                                                    7, 0,  "left"),
-        ("Ensemble k=8",        "ensemble_k8",      [("GPT-5.4",     "results/raw/base_both_k8.jsonl", "full", 8),
-                                                     ("Sonnet 4.6",  "results/raw/base_claude_both_k8.jsonl", "full", 8)],
-                                                    -7, -8, "right"),
-        ("Criteria k=8",        "criteria_k8",      [("GPT-5.4",     "results/raw/criteria_both_k8.jsonl", "full", 8),
-                                                     ("Sonnet 4.6",  "results/raw/criteria_claude_both_k8.jsonl", "full", 8)],
-                                                    -7, 8,  "right"),
-        ("Mini k=8",            "mini_k8",          [("GPT mini",    "results/raw/base_both_k8.jsonl", "mini", 8),
-                                                     ("Haiku 4.5",   "results/raw/base_claude_both_k8.jsonl", "mini", 8)],
-                                                    -7, 0,  "right"),
-        ("Mini+Criteria k=8",   "criteria_mini_k8", [("GPT mini",    "results/raw/criteria_both_k8.jsonl", "mini", 8),
-                                                     ("Haiku 4.5",   "results/raw/criteria_claude_both_k8.jsonl", "mini", 8)],
-                                                    7, 0,   "left"),
-        ("Nano k=8",            "nano_k8",          [("GPT nano",    "results/raw/base_nano_k8.jsonl", "nano", 8)],
-                                                    7, 0,   "left"),
-        ("Calibration (low)",   "cal_low",          [("GPT-5.4",     "results/raw/cal-low_both_k8.jsonl", "full", 8)],
-                                                    7, -8,  "left"),
-        ("Combined",            "combined",         [("GPT-5.4",     "results/raw/combined_both_k8.jsonl", "full", 8)],
-                                                    7, 0,   "left"),
+        # (label, gpt_cost_per_ex_key, candidates, dx_pts, dy_pts, ha, color)
+        ("$k{=}1$ (full)",                  "baseline",         [("GPT-5.4",     "results/raw/base_both_k8.jsonl", "full", 1),
+                                                                 ("Sonnet 4.6",  "results/raw/base_claude_both_k8.jsonl", "full", 1)],
+                                                                7, -8, "left",  "#0173b2"),
+        ("$k{=}1$ + criteria (full)",       "criteria",         [("GPT-5.4",     "results/raw/criteria_both_k8.jsonl", "full", 1),
+                                                                 ("Sonnet 4.6",  "results/raw/criteria_claude_both_k8.jsonl", "full", 1)],
+                                                                7, 0,  "left",  "#029e73"),
+        ("$k{=}8$ (full)",                  "ensemble_k8",      [("GPT-5.4",     "results/raw/base_both_k8.jsonl", "full", 8),
+                                                                 ("Sonnet 4.6",  "results/raw/base_claude_both_k8.jsonl", "full", 8)],
+                                                                -7, -8, "right", "#de8f05"),
+        ("$k{=}8$ + criteria (full)",       "criteria_k8",      [("GPT-5.4",     "results/raw/criteria_both_k8.jsonl", "full", 8),
+                                                                 ("Sonnet 4.6",  "results/raw/criteria_claude_both_k8.jsonl", "full", 8)],
+                                                                -7, 8,  "right", "#d55e00"),
+        ("$k{=}8$ (mini)",                  "mini_k8",          [("GPT mini",    "results/raw/base_both_k8.jsonl", "mini", 8),
+                                                                 ("Haiku 4.5",   "results/raw/base_claude_both_k8.jsonl", "mini", 8)],
+                                                                -7, 0,  "right", "#ca9161"),
+        ("$k{=}8$ + criteria (mini)",       "criteria_mini_k8", [("GPT mini",    "results/raw/criteria_both_k8.jsonl", "mini", 8),
+                                                                 ("Haiku 4.5",   "results/raw/criteria_claude_both_k8.jsonl", "mini", 8)],
+                                                                7, 0,   "left",  "#cc78bc"),
+        ("$k{=}8$ (nano)",                  "nano_k8",          [("GPT nano",    "results/raw/base_nano_k8.jsonl", "nano", 8)],
+                                                                7, 0,   "left",  "#56b4e9"),
+        ("$k{=}8$ + calibration (full)",    "cal_low",          [("GPT-5.4",     "results/raw/cal-low_both_k8.jsonl", "full", 8)],
+                                                                7, -8,  "left",  "#fbafe4"),
+        ("$k{=}8$ + combined (full)",       "combined",         [("GPT-5.4",     "results/raw/combined_both_k8.jsonl", "full", 8)],
+                                                                7, 0,   "left",  "#949494"),
     ]
 
     points = []
-    for label, cost_key, candidates, dx, dy, ha in spec:
+    baseline_cost = None
+    for label, cost_key, candidates, dx, dy, ha, color in spec:
         cost_m = metrics.get(cost_key, {}).get("cost", {})
         cost_per_ex = cost_m.get("cost_per_example")
         if cost_per_ex is None:
             print(f"  pareto: missing cost for {label}")
             continue
+        if cost_key == "baseline":
+            baseline_cost = cost_per_ex
         best_acc = -1
         best_provider = None
         for provider, path, model, k in candidates:
@@ -250,33 +247,26 @@ def plot_pareto_frontier(metrics):
                 best_acc, best_provider = a, provider
         if best_provider is None:
             continue
-        # Drop the provider tag from the displayed label — only the class+condition
-        # is shown on the chart. The provider that supplied each point is recorded
-        # in the caption and Table 4.
-        points.append((cost_per_ex, best_acc, label, dx, dy, ha))
+        # Drop the provider tag from the displayed label — only the
+        # class+technique is shown on the chart. Provider attribution lives
+        # in Table 4.
+        points.append((cost_per_ex, best_acc, label, dx, dy, ha, color))
 
-    if not points:
+    if not points or baseline_cost is None:
         print("  Skipping Pareto: no data")
         return
 
-    # Baseline cost is from the Baseline (GPT full k=1) entry's GPT cost.
-    baseline_cost = next((c for c, a, l, *_ in points if l.startswith("Baseline")), None)
-    if not baseline_cost:
-        print("  Skipping Pareto: no baseline")
-        return
-
     fig, ax = plt.subplots(figsize=(6, 5))
-    rel = [(c / baseline_cost, a, l, dx, dy, h) for c, a, l, dx, dy, h in points]
+    rel = [(c / baseline_cost, a, l, dx, dy, h, color) for c, a, l, dx, dy, h, color in points]
 
-    for rc, acc, label, dx, dy, ha in rel:
-        color = COLORS.get(label, "gray")
+    for rc, acc, label, dx, dy, ha, color in rel:
         ax.scatter(rc, acc, s=60, color=color, zorder=5)
         ax.annotate(label, (rc, acc), xytext=(dx, dy),
                     textcoords="offset points", fontsize=8,
                     va="center", ha=ha)
 
     # Pareto frontier (monotone increasing accuracy with cost)
-    sorted_pts = sorted([(c, a) for c, a, _, _, _, _ in rel])
+    sorted_pts = sorted([(c, a) for c, a, _, _, _, _, _ in rel])
     frontier, best_acc = [], -1
     for c, a in sorted_pts:
         if a > best_acc:
