@@ -67,7 +67,7 @@ Using a language model to score or rank candidate responses has become a scalabl
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{pareto_frontier.png}
-\caption{Cost vs.\ accuracy Pareto frontier across all evaluated conditions. Each point is labelled \textit{technique} \textit{(class)} and shows the best-performing model in that class for the given technique; the provider supplying each point is listed per row in Table~\ref{tab:results-main}. $k{=}8$ + criteria (mini) at 85.8\% (1.2$\times$ baseline cost) is the top operating point; $k{=}8$ (mini) at 84.8\% already exceeds full-class ensemble alternatives at roughly one-quarter the cost. $k{=}8$ + combined (full) (82.6\%, 6.8$\times$) and $k{=}8$ + calibration (full) (81.7\%, 5.6$\times$) are dominated.}
+\caption{Cost vs.\ accuracy Pareto frontier across all evaluated conditions. Each point is labelled \textit{technique} \textit{(class)} and shows the best-performing model in that class for the given technique; the provider supplying each point is listed per row in Table~\ref{tab:results-main}. $k{=}8$ + criteria (mini) at 85.8\% (1.3$\times$ baseline cost) is the top operating point; $k{=}8$ (mini) at 84.8\% already exceeds full-class ensemble alternatives at roughly one-quarter the cost. $k{=}8$ + combined (full) (82.6\%, 6.8$\times$) and $k{=}8$ + calibration (full) (81.7\%, 5.6$\times$) are dominated.}
 \label{fig:pareto}
 \end{figure}
 
@@ -300,7 +300,7 @@ Variance-informed (budget $\leq$2, test)$^\ddagger$ & GPT-5.4 & ${\sim}$343 & 74
 \begin{figure*}[t]
 \centering
 \includegraphics[width=\textwidth]{hero_accuracy.png}
-\caption{Accuracy by condition and category. Criteria $k{=}8$ (83.6\%) matches combined (82.6\%) at lower cost (5.3$\times$ vs 6.8$\times$ baseline); their CIs overlap and we interpret the ordering as a practical tie. Precise~IF remains the hardest category across all conditions.}
+\caption{Accuracy by condition and category. Each bar shows the best-performing provider for that class+condition (legend lists the provider per condition). $k{=}8$ + criteria (mini) reaches the highest overall accuracy (85.8\%, supplied by Haiku 4.5); $k{=}8$ + criteria (full) at 83.6\% matches $k{=}8$ + combined (full) at 82.6\% at lower cost. Precise IF remains the hardest category across all conditions.}
 \label{fig:hero-accuracy}
 \end{figure*}
 
@@ -330,7 +330,7 @@ Table~\ref{tab:what-works} compares prompt variants at $k{=}8$ across model tier
 
 \begin{table}[ht]
 \centering
-\caption{Prompt variant accuracy (\%) at $k{=}8$.}
+\caption{Prompt variant accuracy (\%) at $k{=}8$ on OpenAI GPT-5.4 (Claude variants not collected for calibration / combined).}
 \label{tab:what-works}
 \scriptsize
 \begin{tabular}{lccc}
