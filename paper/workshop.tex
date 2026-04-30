@@ -67,7 +67,7 @@ Using a language model to score or rank candidate responses has become a scalabl
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{pareto_frontier.png}
-\caption{Cost vs.\ accuracy Pareto frontier across all evaluated conditions. Criteria $k{=}8$ (83.6\%, 5.3$\times$ baseline cost) is the highest-accuracy point; mini+criteria $k{=}8$ (81.5\%, 1.2$\times$) matches full-model ensembling (81.5\% at 5.0$\times$) at roughly one-quarter the cost; nano $k{=}8$ sets the low-cost floor. Combined (82.6\%, 6.8$\times$) is dominated by criteria $k{=}8$.}
+\caption{Cost vs.\ accuracy Pareto frontier across all evaluated conditions. Each point is the best-performing model in its class for the given condition; the provider supplying each point is given per row in Table~\ref{tab:results-main}. Mini+Criteria $k{=}8$ (85.8\%, 1.2$\times$ baseline cost) is the top operating point; Mini $k{=}8$ (84.8\%, 1.2$\times$) already exceeds full-class ensemble alternatives at roughly one-quarter the cost. Combined (82.6\%, 6.8$\times$) and Calibration (low) (81.7\%, 5.6$\times$) are dominated.}
 \label{fig:pareto}
 \end{figure}
 

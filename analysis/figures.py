@@ -204,37 +204,39 @@ def plot_pareto_frontier(metrics):
             return None
 
     # Per-condition: try each candidate (path, model, k); keep the best accuracy
-    # and remember which provider supplied it.
+    # and remember which provider supplied it (provider used only for color/caption).
+    # Placement: dx_pts and dy_pts are pixel offsets in the figure; ha is the
+    # text horizontal alignment relative to the anchor point.
     spec = [
-        # (label, gpt_cost_per_ex_key, candidates [(provider, path, model, k)], offset, ha)
+        # (label, gpt_cost_per_ex_key, candidates, dx_pts, dy_pts, ha)
         ("Baseline",            "baseline",         [("GPT-5.4",     "results/raw/base_both_k8.jsonl", "full", 1),
                                                      ("Sonnet 4.6",  "results/raw/base_claude_both_k8.jsonl", "full", 1)],
-                                                    (0.05, -0.004), "left"),
+                                                    7, -8, "left"),
         ("Criteria (k=1)",      "criteria",         [("GPT-5.4",     "results/raw/criteria_both_k8.jsonl", "full", 1),
                                                      ("Sonnet 4.6",  "results/raw/criteria_claude_both_k8.jsonl", "full", 1)],
-                                                    (0.05, 0.004),  "left"),
+                                                    7, 0,  "left"),
         ("Ensemble k=8",        "ensemble_k8",      [("GPT-5.4",     "results/raw/base_both_k8.jsonl", "full", 8),
                                                      ("Sonnet 4.6",  "results/raw/base_claude_both_k8.jsonl", "full", 8)],
-                                                    (0.05, -0.004), "left"),
+                                                    -7, -8, "right"),
         ("Criteria k=8",        "criteria_k8",      [("GPT-5.4",     "results/raw/criteria_both_k8.jsonl", "full", 8),
                                                      ("Sonnet 4.6",  "results/raw/criteria_claude_both_k8.jsonl", "full", 8)],
-                                                    (0.05, 0.004),  "left"),
+                                                    -7, 8,  "right"),
         ("Mini k=8",            "mini_k8",          [("GPT mini",    "results/raw/base_both_k8.jsonl", "mini", 8),
                                                      ("Haiku 4.5",   "results/raw/base_claude_both_k8.jsonl", "mini", 8)],
-                                                    (0.05, 0.004),  "left"),
+                                                    -7, 0,  "right"),
         ("Mini+Criteria k=8",   "criteria_mini_k8", [("GPT mini",    "results/raw/criteria_both_k8.jsonl", "mini", 8),
                                                      ("Haiku 4.5",   "results/raw/criteria_claude_both_k8.jsonl", "mini", 8)],
-                                                    (0.05, 0.004),  "left"),
+                                                    7, 0,   "left"),
         ("Nano k=8",            "nano_k8",          [("GPT nano",    "results/raw/base_nano_k8.jsonl", "nano", 8)],
-                                                    (-0.04, 0.000), "right"),
+                                                    7, 0,   "left"),
         ("Calibration (low)",   "cal_low",          [("GPT-5.4",     "results/raw/cal-low_both_k8.jsonl", "full", 8)],
-                                                    (0.05, -0.004), "left"),
+                                                    7, -8,  "left"),
         ("Combined",            "combined",         [("GPT-5.4",     "results/raw/combined_both_k8.jsonl", "full", 8)],
-                                                    (0.05, 0.004),  "left"),
+                                                    7, 0,   "left"),
     ]
 
     points = []
-    for label, cost_key, candidates, off, ha in spec:
+    for label, cost_key, candidates, dx, dy, ha in spec:
         cost_m = metrics.get(cost_key, {}).get("cost", {})
         cost_per_ex = cost_m.get("cost_per_example")
         if cost_per_ex is None:
@@ -248,7 +250,10 @@ def plot_pareto_frontier(metrics):
                 best_acc, best_provider = a, provider
         if best_provider is None:
             continue
-        points.append((cost_per_ex, best_acc, f"{label} ({best_provider})", off, ha))
+        # Drop the provider tag from the displayed label — only the class+condition
+        # is shown on the chart. The provider that supplied each point is recorded
+        # in the caption and Table 4.
+        points.append((cost_per_ex, best_acc, label, dx, dy, ha))
 
     if not points:
         print("  Skipping Pareto: no data")
@@ -261,21 +266,17 @@ def plot_pareto_frontier(metrics):
         return
 
     fig, ax = plt.subplots(figsize=(6, 5))
-    rel = [(c / baseline_cost, a, l, o, h) for c, a, l, o, h in points]
+    rel = [(c / baseline_cost, a, l, dx, dy, h) for c, a, l, dx, dy, h in points]
 
-    for rc, acc, label, (dx, dy), ha in rel:
-        # Color by base label (without provider suffix) so colors match across re-renders
-        base_label = label.split(" (")[0]
-        color = COLORS.get(base_label, "gray")
+    for rc, acc, label, dx, dy, ha in rel:
+        color = COLORS.get(label, "gray")
         ax.scatter(rc, acc, s=60, color=color, zorder=5)
-        px = 6 if ha == "left" else -6
-        py = 0 if abs(dy) < 1e-6 else (4 if dy > 0 else -4)
-        ax.annotate(label, (rc, acc), xytext=(px, py),
+        ax.annotate(label, (rc, acc), xytext=(dx, dy),
                     textcoords="offset points", fontsize=8,
                     va="center", ha=ha)
 
     # Pareto frontier (monotone increasing accuracy with cost)
-    sorted_pts = sorted([(c, a) for c, a, _, _, _ in rel])
+    sorted_pts = sorted([(c, a) for c, a, _, _, _, _ in rel])
     frontier, best_acc = [], -1
     for c, a in sorted_pts:
         if a > best_acc:
