@@ -1,6 +1,6 @@
 # On Cost-Effective LLM-as-a-Judge Improvement Techniques
 
-**Authors:** Ryan Lail, Luke Markham<br>
+**Authors:** [Ryan Lail](https://github.com/ryanlail), [Luke Markham](https://github.com/mlukewizard)<br>
 **Affiliation:** Composo AI
 
 We systematically tested four drop-in techniques for improving LLM judge accuracy on [RewardBench 2](https://huggingface.co/datasets/allenai/reward-bench-2) and found that two — task-specific criteria injection and ensembling — reach up to **85.8%** accuracy (+13.5pp over baseline). The gains generalise across providers: experiments cover both OpenAI GPT and Anthropic Claude families. No fine-tuning required.
