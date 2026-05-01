@@ -3,7 +3,7 @@
 **Authors:** Ryan Lail, Luke Markham<br>
 **Affiliation:** Composo AI
 
-We systematically tested five techniques for improving LLM judge accuracy on [RewardBench 2](https://huggingface.co/datasets/allenai/reward-bench-2) and found that two simple, drop-in changes — task-specific criteria injection and ensembling — reach up to **85.8%** accuracy (+13.5pp over baseline). The gains generalise across providers: experiments cover both OpenAI GPT and Anthropic Claude families. No fine-tuning required.
+We systematically tested four drop-in techniques for improving LLM judge accuracy on [RewardBench 2](https://huggingface.co/datasets/allenai/reward-bench-2) and found that two — task-specific criteria injection and ensembling — reach up to **85.8%** accuracy (+13.5pp over baseline). The gains generalise across providers: experiments cover both OpenAI GPT and Anthropic Claude families. No fine-tuning required.
 
 **Paper:** [On Cost-Effective LLM-as-a-Judge Improvement Techniques](https://arxiv.org/abs/2604.13717) | **Blog post:** [Improving LLM Judges With Experiments, Not Vibes](https://www.composo.ai/post/llm-judge-criteria-ensembling/)
 
@@ -104,24 +104,23 @@ All accuracy deltas in percentage points (pp). 95% bootstrap CIs shown. Conditio
 | Condition | N | Overall (95% CI) | $/example | vs Baseline |
 |-----------|---|------------------|-----------|-------------|
 | Calibration low (k=1) | 1737 | 73.8% (±2.1pp) | $0.0198 | 1.5× |
-| Calibration low (k=8) | 1737 | 81.7% (±1.8pp) | $0.0744 | 5.6× |
+| Calibration low (k=8) | 1744 | 81.7% (±1.8pp) | $0.0744 | 5.6× |
 | Combined (full k=8) | 1746 | 82.6% (±1.8pp) | $0.0913 | 6.8× |
-| Combined + blend (test) ‡ | ~348 | 84.8% | $0.0913 | 6.8× |
+| Soft blend (test) ‡ | ~343 | 80.2% (±4.2pp) | — | 6.1× |
+| Variance-informed (budget ≤2, test) ‡ | ~343 | 74.9% (±4.7pp) | — | 1.6× |
 
-> **‡** Blend parameters optimised on 80% train split, accuracy on held-out 20%. See report for caveats.
+> **‡** Test-set evaluation: parameters optimised on 80% of data, evaluated on held-out 20% (~340 examples).
 
 **Cross-model generalisation (Anthropic Claude):**
 
-| Condition | N | Overall (95% CI) |
-|-----------|---|------------------|
-| Sonnet 4.6 baseline (k=1) | 1698 | 72.7% (±2.2pp) |
-| Sonnet 4.6 ensemble (k=8) | 1705 | 83.0% (±1.9pp) |
-| Sonnet 4.6 + criteria (k=8) | 1712 | 83.5% (±1.7pp) |
-| Haiku 4.5 baseline (k=1) | 1701 | 72.7% (±2.1pp) |
-| Haiku 4.5 ensemble (k=8) | 1721 | 85.1% (±1.7pp) |
-| **Haiku 4.5 + criteria (k=8)** | 1723 | **86.0%** (±1.7pp) |
-
-> Headline 85.8% in the paper is the cross-class peak (mini + criteria k=8) reported on the paper's $N{=}1763$ sample; the 86.0% above is the same condition recomputed on this repo's intersection sample ($N{=}1723$). Same condition, marginally different N.
+| Condition | N | Overall (95% CI) | vs Baseline |
+|-----------|---|------------------|-------------|
+| Sonnet 4.6 baseline (k=1) | 1737 | 72.3% (±2.2pp) | 1.1× |
+| Sonnet 4.6 + criteria (k=1) | 1743 | 74.1% (±2.1pp) | 1.2× |
+| Sonnet 4.6 ensemble (k=8) | 1744 | 82.7% (±1.8pp) | 5.1× |
+| Sonnet 4.6 + criteria (k=8) | 1751 | 83.4% (±1.8pp) | 5.4× |
+| Haiku 4.5 ensemble (k=8) | 1761 | 84.8% (±1.7pp) | 1.3× |
+| **Haiku 4.5 + criteria (k=8)** | 1763 | **85.8%** (±1.7pp) | 1.3× |
 
 ![Hero Accuracy](figures/hero_accuracy.png)
 
