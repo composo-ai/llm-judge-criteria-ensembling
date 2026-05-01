@@ -1,9 +1,9 @@
 # On Cost-Effective LLM-as-a-Judge Improvement Techniques
 
-**Author:** Ryan Lail<br>
+**Authors:** Ryan Lail, Luke Markham<br>
 **Affiliation:** Composo AI
 
-We systematically tested five techniques for improving LLM judge accuracy on [RewardBench 2](https://huggingface.co/datasets/allenai/reward-bench-2) and found that three simple, drop-in changes improve accuracy from 71.7% to 83.6%. No fine-tuning required.
+We systematically tested five techniques for improving LLM judge accuracy on [RewardBench 2](https://huggingface.co/datasets/allenai/reward-bench-2) and found that two simple, drop-in changes — task-specific criteria injection and ensembling — reach up to **85.8%** accuracy (+13.5pp over baseline). The gains generalise across providers: experiments cover both OpenAI GPT and Anthropic Claude families. No fine-tuning required.
 
 **Paper:** [On Cost-Effective LLM-as-a-Judge Improvement Techniques](https://arxiv.org/abs/2604.13717) | **Blog post:** [Improving LLM Judges With Experiments, Not Vibes](https://www.composo.ai/post/llm-judge-criteria-ensembling/)
 
@@ -15,11 +15,14 @@ We systematically tested five techniques for improving LLM judge accuracy on [Re
 
 3. **Be specific.** The standard judge prompt asks for generic qualities like "helpfulness, relevance, accuracy." Add a single sentence specifying what actually matters for each task. **+3.0pp at near-zero cost.** Criteria were pre-registered — no post-hoc tuning.
 
-Combined, criteria + ensembling reach **83.6%** accuracy at 5.3× baseline cost.
+Combined, criteria + ensembling reach **83.6%** on the GPT full class (5.3× baseline cost) and up to **85.8%** on the mini class with Anthropic Haiku 4.5 (1.3× baseline cost).
 
 ## Setup
 
-**Requirements**: Python 3.13, Azure OpenAI access (GPT-5.4, GPT-5.4 mini, and optionally GPT-5.4 nano deployments).
+**Requirements**:
+- Python 3.13
+- Azure OpenAI access (GPT-5.4, GPT-5.4 mini, and optionally GPT-5.4 nano deployments) for the OpenAI experiments
+- Claude CLI (`claude` on `PATH`, with a Pro/Max subscription) for the cross-model Anthropic experiments — `collect_claude.py` shells out to `claude -p` rather than calling the API directly
 
 ```bash
 python3.13 -m venv .venv
@@ -53,6 +56,21 @@ python collect.py --prompt base --models full --k 8 --temperature 0.7
 
 # Or run everything:
 bash run_all.sh
+```
+
+### Cross-model generalisation (Anthropic Claude)
+
+The `collect_claude.py` driver mirrors `collect.py` but uses the `claude` CLI to score with Claude Sonnet 4.6 (full) and Claude Haiku 4.5 (mini):
+
+```bash
+# Base prompt (k=8, both Sonnet and Haiku)
+python collect_claude.py --prompt base --k 8
+
+# + criteria
+python collect_claude.py --prompt criteria --k 8
+
+# Or run both:
+bash run_claude.sh
 ```
 
 All collections write incrementally and support **resume** — restart after interruption and completed examples are skipped.
@@ -92,14 +110,29 @@ All accuracy deltas in percentage points (pp). 95% bootstrap CIs shown. Conditio
 
 > **‡** Blend parameters optimised on 80% train split, accuracy on held-out 20%. See report for caveats.
 
+**Cross-model generalisation (Anthropic Claude):**
+
+| Condition | N | Overall (95% CI) |
+|-----------|---|------------------|
+| Sonnet 4.6 baseline (k=1) | 1698 | 72.7% (±2.2pp) |
+| Sonnet 4.6 ensemble (k=8) | 1705 | 83.0% (±1.9pp) |
+| Sonnet 4.6 + criteria (k=8) | 1712 | 83.5% (±1.7pp) |
+| Haiku 4.5 baseline (k=1) | 1701 | 72.7% (±2.1pp) |
+| Haiku 4.5 ensemble (k=8) | 1721 | 85.1% (±1.7pp) |
+| **Haiku 4.5 + criteria (k=8)** | 1723 | **86.0%** (±1.7pp) |
+
+> Headline 85.8% in the paper is the cross-class peak (mini + criteria k=8) reported on the paper's $N{=}1763$ sample; the 86.0% above is the same condition recomputed on this repo's intersection sample ($N{=}1723$). Same condition, marginally different N.
+
 ![Hero Accuracy](figures/hero_accuracy.png)
 
 ## File Structure
 
 ```
 ├── judge.py                    # Shared judge logic: prompts, scoring, retry
-├── collect.py                  # Unified data collection
-├── run_all.sh                  # Run all collections sequentially
+├── collect.py                  # OpenAI data collection (Azure GPT-5.4 family)
+├── collect_claude.py           # Anthropic data collection (Claude CLI)
+├── run_all.sh                  # Run all OpenAI collections sequentially
+├── run_claude.sh               # Run Claude generalisation collections
 ├── requirements.txt            # Python dependencies
 ├── .env.example                # Template for Azure OpenAI credentials
 ├── LICENSE
@@ -135,9 +168,11 @@ This design minimises API calls while maximising the number of conditions that c
 
 ```bibtex
 @misc{lail2026llmjudge,
-  title={Criteria Injection and Ensembling Are All You Need: A Systematic Evaluation of LLM Judge Techniques on RewardBench 2},
-  author={Ryan Lail},
+  title={On Cost-Effective LLM-as-a-Judge Improvement Techniques},
+  author={Lail, Ryan and Markham, Luke},
   year={2026},
-  url={https://github.com/composo-ai/llm-judge-criteria-ensembling}
+  eprint={2604.13717},
+  archivePrefix={arXiv},
+  primaryClass={cs.CL},
 }
 ```
