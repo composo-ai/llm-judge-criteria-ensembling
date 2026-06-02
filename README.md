@@ -173,5 +173,6 @@ This design minimises API calls while maximising the number of conditions that c
   eprint={2604.13717},
   archivePrefix={arXiv},
   primaryClass={cs.CL},
+  note={Accepted at the ICML 2026 Workshop on Statistical Frameworks for Uncertainty in Agentic Systems and the ICML 2026 Workshop on Combining Theory and Benchmarks},
 }
 ```
