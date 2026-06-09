@@ -18,6 +18,7 @@ import numpy as np
 from analysis.compute_metrics import (
     load_collection,
     compute_accuracy,
+    bootstrap_accuracy_ci,
     compute_blend_accuracy,
     _compute_mini_stds,
     _mean_ignoring_none,
@@ -112,7 +113,7 @@ def plot_hero_accuracy(metrics):
     breakdown. Mixed-provider lines are kept honest by noting the
     selected provider in the legend label.
     """
-    from analysis.compute_metrics import load_collection, compute_accuracy
+    from analysis.compute_metrics import load_collection, compute_accuracy, bootstrap_accuracy_ci
 
     # (display_label, candidates [(provider, path, model, k)], color)
     spec = [
@@ -134,19 +135,23 @@ def plot_hero_accuracy(metrics):
     ]
 
     conditions = {}
+    cis = {}
     color_map = {}
     for label, candidates, color in spec:
-        best_acc, best_pkg = -1, None
+        best_acc, best_pkg, best_sel = -1, None, None
         for provider, path, model, k in candidates:
             try:
-                a = compute_accuracy(load_collection(path), model=model, k_subset=k)
+                data = load_collection(path)
             except FileNotFoundError:
                 continue
+            a = compute_accuracy(data, model=model, k_subset=k)
             if a["overall"] > best_acc:
-                best_acc, best_pkg = a["overall"], a
+                best_acc, best_pkg, best_sel = a["overall"], a, (data, model, k)
         if best_pkg is None:
             continue
         conditions[label] = {sub: d["accuracy"] for sub, d in best_pkg["by_subset"].items()}
+        sel_data, sel_model, sel_k = best_sel
+        cis[label] = bootstrap_accuracy_ci(sel_data, model=sel_model, k_subset=sel_k)["by_subset"]
         color_map[label] = color
 
     if not conditions:
@@ -163,8 +168,13 @@ def plot_hero_accuracy(metrics):
 
     for i, name in enumerate(cond_names):
         vals = [conditions[name].get(s, 0) for s in subsets]
+        ci = cis.get(name, {})
+        lo = [vals[j] - ci.get(s, {}).get("ci_low", vals[j]) for j, s in enumerate(subsets)]
+        hi = [ci.get(s, {}).get("ci_high", vals[j]) - vals[j] for j, s in enumerate(subsets)]
         color = color_map.get(name, f"C{i}")
-        ax.bar(x + i * bar_w, vals, bar_w, label=name, color=color)
+        ax.bar(x + i * bar_w, vals, bar_w, label=name, color=color,
+               yerr=np.array([lo, hi]),
+               error_kw={"elinewidth": 0.8, "capsize": 0, "ecolor": "black", "alpha": 1.0})
 
     ax.axhline(0.25, color="gray", linestyle="--", lw=0.8, label="Random (25%)")
     ax.set_xlabel("Category")
