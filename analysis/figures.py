@@ -174,7 +174,7 @@ def plot_hero_accuracy(metrics):
         color = color_map.get(name, f"C{i}")
         ax.bar(x + i * bar_w, vals, bar_w, label=name, color=color,
                yerr=np.array([lo, hi]),
-               error_kw={"elinewidth": 0.6, "capsize": 0, "ecolor": "black", "alpha": 0.55})
+               error_kw={"elinewidth": 0.8, "capsize": 0, "ecolor": "black", "alpha": 1.0})
 
     ax.axhline(0.25, color="gray", linestyle="--", lw=0.8, label="Random (25%)")
     ax.set_xlabel("Category")
